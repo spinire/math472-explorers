@@ -1,0 +1,556 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Norms and Conditioning</title>
+<meta name="description" content="See vector and matrix norms as shapes and stretches, then watch an ill-conditioned system amplify a tiny change.">
+<style>
+:root {
+  color-scheme: light;
+  --bg: #fcfcfb;
+  --surface: #f3f2ef;
+  --ink: #111110;
+  --ink-2: #4a4946;
+  --ink-3: #6b6a66;
+  --rule: #d9d7d1;
+  --accent: #1f64b8;
+  --s1: #2a78d6;      /* blue: active row / series 1 */
+  --s2: #c9501f;      /* orange: pivot / series 2 */
+  --s3: #13875e;      /* aqua-green: L entries / series 3 */
+  --t1: #dbe8f8;      /* tints for cell highlights */
+  --t2: #fbe1d4;
+  --t3: #d5efe3;
+  --t4: #f5ecc8;
+  --focus: #1f64b8;
+  --maxw: 60rem;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #1a1a19;
+    --surface: #242422;
+    --ink: #f4f3ef;
+    --ink-2: #c3c2b7;
+    --ink-3: #a3a29a;
+    --rule: #3d3c39;
+    --accent: #7fb2f0;
+    --s1: #5a9cec;
+    --s2: #f08a5d;
+    --s3: #3cc392;
+    --t1: #1e3450;
+    --t2: #4a2a1b;
+    --t3: #173d2f;
+    --t4: #423a17;
+    --focus: #7fb2f0;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #1a1a19; --surface: #242422; --ink: #f4f3ef; --ink-2: #c3c2b7; --ink-3: #a3a29a;
+  --rule: #3d3c39; --accent: #7fb2f0; --s1: #5a9cec; --s2: #f08a5d; --s3: #3cc392;
+  --t1: #1e3450; --t2: #4a2a1b; --t3: #173d2f; --t4: #423a17; --focus: #7fb2f0;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html { background: var(--bg); }
+body {
+  margin: 0; background: var(--bg); color: var(--ink);
+  font: 17px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+.wrap { max-width: var(--maxw); margin: 0 auto; padding: 1.5rem 16px 4rem; }
+header.site { border-bottom: 1px solid var(--rule); margin-bottom: 2rem; padding-bottom: 1rem; }
+header.site .crumb { font-size: .9rem; color: var(--ink-3); margin: 0 0 .25rem; }
+header.site .crumb a { color: var(--ink-3); }
+h1 { font-size: 1.9rem; line-height: 1.2; margin: 0 0 .5rem; letter-spacing: -.01em; }
+h2 { font-size: 1.35rem; margin: 3rem 0 .5rem; line-height: 1.3; }
+h3 { font-size: 1.1rem; margin: 1.75rem 0 .4rem; }
+p { margin: .6rem 0; }
+.lede { font-size: 1.08rem; color: var(--ink-2); max-width: 44rem; }
+.muted { color: var(--ink-3); }
+a { color: var(--accent); }
+:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; border-radius: 3px; }
+.skip { position: absolute; left: -9999px; }
+.skip:focus { left: 1rem; top: 1rem; background: var(--bg); padding: .5rem; z-index: 10; }
+.panel { background: var(--surface); border-radius: 10px; padding: 1rem 1.1rem; margin: 1rem 0; overflow-x: auto; }
+.row { display: flex; flex-wrap: wrap; gap: 1.25rem; align-items: flex-start; }
+.col { flex: 1 1 18rem; min-width: 0; }
+.controls { display: flex; flex-wrap: wrap; gap: .5rem .75rem; align-items: center; margin: .75rem 0; }
+button, select, input[type=number], input[type=text] {
+  font: inherit; font-size: .95rem; color: var(--ink); background: var(--bg);
+  border: 1px solid var(--rule); border-radius: 7px; padding: .35rem .75rem; min-height: 2.25rem;
+}
+button { cursor: pointer; }
+button:hover:not(:disabled) { border-color: var(--ink-3); }
+button:disabled { opacity: .45; cursor: default; }
+button.primary { background: var(--accent); color: var(--bg); border-color: var(--accent); }
+input[type=number] { width: 5.5rem; }
+input[type=range] { accent-color: var(--accent); width: min(18rem, 100%); }
+label { font-size: .95rem; }
+.narr {
+  min-height: 4.5rem; border-left: 3px solid var(--accent); padding: .35rem .9rem; margin: .75rem 0;
+  background: var(--bg); border-radius: 0 6px 6px 0;
+}
+.narr strong { color: var(--ink); }
+.stepcount { font-size: .88rem; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.readout { font-variant-numeric: tabular-nums; }
+.readout dt { color: var(--ink-3); font-size: .88rem; }
+.readout dd { margin: 0 0 .5rem; font-size: 1.05rem; }
+.kv { display: grid; grid-template-columns: minmax(7rem, 48%) minmax(0, 1fr); gap: .15rem 1rem; font-variant-numeric: tabular-nums; }
+.kv > :nth-child(odd) { color: var(--ink-3); }
+.mono, code { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: .92em; }
+.math { font-family: "Cambria Math", "STIX Two Math", "Latin Modern Math", Georgia, serif; font-style: normal; }
+.math i, i.v { font-style: italic; }
+/* matrices */
+.mats { display: flex; flex-wrap: wrap; gap: 1rem 1.5rem; align-items: center; margin: .75rem 0; }
+.matwrap { display: inline-flex; flex-direction: column; align-items: center; gap: .2rem; }
+.matwrap .cap { font-size: .9rem; color: var(--ink-3); }
+table.mat { border-collapse: separate; border-spacing: 2px; position: relative; padding: 0 6px;
+  font-variant-numeric: tabular-nums; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: .92rem; }
+table.mat::before, table.mat::after { content: ""; position: absolute; top: 0; bottom: 0; width: 6px;
+  border: 1.5px solid var(--ink-2); }
+table.mat::before { left: 0; border-right: none; }
+table.mat::after { right: 0; border-left: none; }
+table.mat td { padding: .2rem .5rem; text-align: right; min-width: 3.2rem; border-radius: 4px;
+  transition: background-color .25s; }
+table.mat td.pivot { background: var(--t2); outline: 2px solid var(--s2); }
+table.mat td.hlrow { background: var(--t1); }
+table.mat td.src { background: var(--t4); }
+table.mat td.newL { background: var(--t3); outline: 2px solid var(--s3); }
+table.mat td.zeroed { color: var(--ink-3); }
+table.mat td.dim { color: var(--ink-3); opacity: .55; }
+table.mat td.done { background: var(--t3); }
+.op { font-size: 1.3rem; color: var(--ink-3); }
+/* legend chips */
+.legend { display: flex; flex-wrap: wrap; gap: .4rem 1rem; font-size: .88rem; color: var(--ink-2); margin: .25rem 0; }
+.chip { display: inline-block; width: .9rem; height: .9rem; border-radius: 3px; vertical-align: -2px; margin-right: .3rem; }
+/* svg */
+svg.plot { width: 100%; height: auto; display: block; overflow: visible; }
+svg.plot text { fill: var(--ink-2); font: 12px system-ui, sans-serif; }
+svg.plot .axis { stroke: var(--ink-3); stroke-width: 1; }
+svg.plot .grid { stroke: var(--rule); stroke-width: 1; }
+.fig { margin: .75rem 0; }
+.figcap { font-size: .9rem; color: var(--ink-3); margin-top: .35rem; }
+details { margin: .75rem 0; }
+summary { cursor: pointer; color: var(--accent); }
+.predict { background: var(--t4); border-radius: 8px; padding: .5rem .8rem; margin: .5rem 0; }
+.good { color: var(--s3); font-weight: 600; }
+.bad { color: var(--s2); font-weight: 600; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+nav.toc { font-size: .95rem; }
+nav.toc ol { padding-left: 1.2rem; margin: .25rem 0; }
+footer.site { margin-top: 4rem; padding-top: 1rem; border-top: 1px solid var(--rule); font-size: .88rem; color: var(--ink-3); }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+@media (max-width: 560px) { body { font-size: 16px; } h1 { font-size: 1.55rem; } table.mat td { min-width: 2.4rem; padding: .15rem .3rem; } }
+
+</style>
+<script>
+/* ---------- shared helpers: numerics, formatting, DOM, SVG, stepper ---------- */
+"use strict";
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
+const el = (tag, attrs = {}, ...kids) => {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (k === "class") e.className = v; else if (k === "html") e.innerHTML = v;
+    else if (k.startsWith("on")) e.addEventListener(k.slice(2), v); else e.setAttribute(k, v);
+  }
+  for (const k of kids) if (k != null) e.append(k.nodeType ? k : document.createTextNode(k));
+  return e;
+};
+const SVGNS = "http://www.w3.org/2000/svg";
+const sv = (tag, attrs = {}, parent) => {
+  const e = document.createElementNS(SVGNS, tag);
+  for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
+  if (parent) parent.appendChild(e);
+  return e;
+};
+const cssVar = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+
+/* number formatting */
+function fmt(x, d = 4) {
+  if (!isFinite(x)) return x > 0 ? "∞" : (x < 0 ? "−∞" : "NaN");
+  if (x === 0) return "0";
+  const a = Math.abs(x);
+  let s;
+  if (a >= 1e5 || a < 1e-3) s = fmtExp(x, d);
+  else { s = (+x.toFixed(d)).toString(); }
+  return s.replace("-", "−");
+}
+function fmtExp(x, d = 3) {
+  if (x === 0) return "0";
+  const e = Math.floor(Math.log10(Math.abs(x)));
+  let m = x / Math.pow(10, e);
+  if (Math.abs(+m.toFixed(d - 1)) >= 10) { m /= 10; return fmtExp(x, d); }
+  return (+m.toFixed(d - 1)).toString().replace("-", "−") + "×10" + sup(e);
+}
+function sup(n) {
+  const m = { "-": "⁻", "0": "⁰", "1": "¹", "2": "²", "3": "³", "4": "⁴", "5": "⁵", "6": "⁶", "7": "⁷", "8": "⁸", "9": "⁹" };
+  return String(n).split("").map(c => m[c] || c).join("");
+}
+function fmtFrac(x) { // nice display for values that are near simple fractions/integers
+  if (Math.abs(x - Math.round(x)) < 1e-12) return String(Math.round(x)).replace("-", "−");
+  return fmt(x, 4);
+}
+
+/* ---------- linear algebra (dense, arrays of arrays) ---------- */
+const LA = {
+  clone: A => A.map(r => r.slice()),
+  eye: n => Array.from({ length: n }, (_, i) => Array.from({ length: n }, (_, j) => +(i === j))),
+  zeros: (m, n) => Array.from({ length: m }, () => new Array(n).fill(0)),
+  T: A => A[0].map((_, j) => A.map(r => r[j])),
+  mul(A, B) {
+    const m = A.length, k = B.length, n = B[0].length, C = LA.zeros(m, n);
+    for (let i = 0; i < m; i++) for (let p = 0; p < k; p++) { const a = A[i][p]; if (a) for (let j = 0; j < n; j++) C[i][j] += a * B[p][j]; }
+    return C;
+  },
+  mv: (A, x) => A.map(r => r.reduce((s, a, j) => s + a * x[j], 0)),
+  dot: (x, y) => x.reduce((s, a, i) => s + a * y[i], 0),
+  norm2: x => Math.hypot(...x),
+  norm1: x => x.reduce((s, a) => s + Math.abs(a), 0),
+  normInf: x => Math.max(...x.map(Math.abs)),
+  sub: (x, y) => x.map((a, i) => a - y[i]),
+  matNorm1: A => Math.max(...A[0].map((_, j) => A.reduce((s, r) => s + Math.abs(r[j]), 0))),
+  matNormInf: A => Math.max(...A.map(r => r.reduce((s, a) => s + Math.abs(a), 0))),
+  /* LU with optional partial pivoting; returns {L,U,perm,swaps} */
+  lu(A0, pivot = true) {
+    const n = A0.length, U = LA.clone(A0), L = LA.eye(n), perm = [...Array(n).keys()];
+    for (let k = 0; k < n - 1; k++) {
+      if (pivot) {
+        let p = k; for (let i = k + 1; i < n; i++) if (Math.abs(U[i][k]) > Math.abs(U[p][k])) p = i;
+        if (p !== k) { [U[k], U[p]] = [U[p], U[k]]; [perm[k], perm[p]] = [perm[p], perm[k]];
+          for (let j = 0; j < k; j++) [L[k][j], L[p][j]] = [L[p][j], L[k][j]]; }
+      }
+      for (let i = k + 1; i < n; i++) {
+        const m = U[i][k] / U[k][k]; L[i][k] = m;
+        for (let j = k; j < n; j++) U[i][j] -= m * U[k][j];
+        U[i][k] = 0;
+      }
+    }
+    return { L, U, perm };
+  },
+  fwd(L, b) { const n = b.length, y = new Array(n); for (let i = 0; i < n; i++) { let s = b[i]; for (let j = 0; j < i; j++) s -= L[i][j] * y[j]; y[i] = s / L[i][i]; } return y; },
+  back(U, y) { const n = y.length, x = new Array(n); for (let i = n - 1; i >= 0; i--) { let s = y[i]; for (let j = i + 1; j < n; j++) s -= U[i][j] * x[j]; x[i] = s / U[i][i]; } return x; },
+  solve(A, b, pivot = true) { const { L, U, perm } = LA.lu(A, pivot); return LA.back(U, LA.fwd(L, perm.map(i => b[i]))); },
+  /* Gauss–Jordan inverse with partial pivoting (the usual textbook inverse) */
+  inv(A0) {
+    const n = A0.length, M = A0.map((r, i) => [...r, ...LA.eye(n)[i]]);
+    for (let k = 0; k < n; k++) {
+      let p = k; for (let i = k + 1; i < n; i++) if (Math.abs(M[i][k]) > Math.abs(M[p][k])) p = i;
+      [M[k], M[p]] = [M[p], M[k]];
+      const d = M[k][k]; for (let j = 0; j < 2 * n; j++) M[k][j] /= d;
+      for (let i = 0; i < n; i++) if (i !== k) { const m = M[i][k]; if (m) for (let j = 0; j < 2 * n; j++) M[i][j] -= m * M[k][j]; }
+    }
+    return M.map(r => r.slice(n));
+  },
+  /* Cholesky solve (for normal equations) */
+  cholSolve(A, b) {
+    const n = A.length, L = LA.zeros(n, n);
+    for (let j = 0; j < n; j++) {
+      let s = A[j][j]; for (let k = 0; k < j; k++) s -= L[j][k] * L[j][k];
+      if (!(s > 0)) return null;
+      L[j][j] = Math.sqrt(s);
+      for (let i = j + 1; i < n; i++) { let t = A[i][j]; for (let k = 0; k < j; k++) t -= L[i][k] * L[j][k]; L[i][j] = t / L[j][j]; }
+    }
+    const y = LA.fwd(L, b); return LA.back(LA.T(L), y);
+  },
+  /* Householder QR least squares: returns x minimising ||Ax-b|| */
+  qrSolve(A0, b0) {
+    const m = A0.length, n = A0[0].length, A = LA.clone(A0), b = b0.slice();
+    for (let k = 0; k < n; k++) {
+      let nr = 0; for (let i = k; i < m; i++) nr += A[i][k] * A[i][k]; nr = Math.sqrt(nr);
+      if (nr === 0) continue;
+      const alpha = A[k][k] > 0 ? -nr : nr, v = new Array(m).fill(0);
+      v[k] = A[k][k] - alpha; for (let i = k + 1; i < m; i++) v[i] = A[i][k];
+      let vv = 0; for (let i = k; i < m; i++) vv += v[i] * v[i];
+      if (vv === 0) continue;
+      for (let j = k; j < n; j++) { let s = 0; for (let i = k; i < m; i++) s += v[i] * A[i][j]; s = 2 * s / vv; for (let i = k; i < m; i++) A[i][j] -= s * v[i]; }
+      let s = 0; for (let i = k; i < m; i++) s += v[i] * b[i]; s = 2 * s / vv; for (let i = k; i < m; i++) b[i] -= s * v[i];
+    }
+    const R = A.slice(0, n).map(r => r.slice(0, n));
+    return LA.back(R, b.slice(0, n));
+  },
+  /* singular values via one-sided Jacobi (accurate for small dense matrices) */
+  svals(A0) {
+    const m = A0.length, n = A0[0].length;
+    let U = A0.map(r => r.slice());
+    if (m < n) U = LA.T(U);
+    const cols = U[0].length, rows = U.length;
+    for (let sweep = 0; sweep < 60; sweep++) {
+      let off = 0;
+      for (let p = 0; p < cols - 1; p++) for (let q = p + 1; q < cols; q++) {
+        let a = 0, b = 0, c = 0;
+        for (let i = 0; i < rows; i++) { a += U[i][p] * U[i][p]; b += U[i][q] * U[i][q]; c += U[i][p] * U[i][q]; }
+        if (Math.abs(c) <= 1e-15 * Math.sqrt(a * b)) continue;
+        off = Math.max(off, Math.abs(c) / Math.sqrt(a * b));
+        const z = (b - a) / (2 * c), t = Math.sign(z || 1) / (Math.abs(z) + Math.sqrt(1 + z * z));
+        const cs = 1 / Math.sqrt(1 + t * t), sn = cs * t;
+        for (let i = 0; i < rows; i++) { const up = U[i][p], uq = U[i][q]; U[i][p] = cs * up - sn * uq; U[i][q] = sn * up + cs * uq; }
+      }
+      if (off < 1e-15) break;
+    }
+    const s = []; for (let j = 0; j < cols; j++) { let t = 0; for (let i = 0; i < rows; i++) t += U[i][j] * U[i][j]; s.push(Math.sqrt(t)); }
+    return s.sort((a, b) => b - a);
+  },
+  cond2(A) { const s = LA.svals(A); return s[0] / s[s.length - 1]; },
+};
+
+/* seeded PRNG so every student sees the same "random" numbers */
+function mulberry32(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+
+/* ---------- matrix rendering ---------- */
+/* cls(i,j) -> class name; fmtf(v,i,j) -> string */
+function matTable(M, { label = "matrix", cls = () => "", fmtf = v => fmtFrac(v), cap = null } = {}) {
+  const t = el("table", { class: "mat", "aria-label": `${label}, ${M.length} by ${M[0].length}` });
+  const tb = el("tbody"); t.append(tb);
+  M.forEach((r, i) => { const tr = el("tr"); r.forEach((v, j) => { const c = cls(i, j); tr.append(el("td", c ? { class: c } : {}, fmtf(v, i, j))); }); tb.append(tr); });
+  const w = el("div", { class: "matwrap" }, t);
+  if (cap) w.append(el("div", { class: "cap", html: cap }));
+  return w;
+}
+const colVec = x => x.map(v => [v]);
+
+/* ---------- linear scale + axes ---------- */
+function scale(d0, d1, r0, r1, log = false) {
+  if (log) { const a = Math.log10(d0), b = Math.log10(d1); const f = v => r0 + (Math.log10(v) - a) / (b - a) * (r1 - r0); f.inv = p => Math.pow(10, a + (p - r0) / (r1 - r0) * (b - a)); return f; }
+  const f = v => r0 + (v - d0) / (d1 - d0) * (r1 - r0); f.inv = p => d0 + (p - r0) / (r1 - r0) * (d1 - d0); return f;
+}
+function niceTicks(a, b, n = 6) {
+  const span = b - a, step0 = span / n, mag = Math.pow(10, Math.floor(Math.log10(step0)));
+  const step = [1, 2, 2.5, 5, 10].map(s => s * mag).find(s => span / s <= n) || 10 * mag;
+  const out = []; for (let v = Math.ceil(a / step) * step; v <= b + 1e-9 * step; v += step) out.push(+v.toFixed(10));
+  return out;
+}
+/* axes(svg, X, Y, {xt, yt, xlab, ylab, W, H, pad, log flags}) */
+function drawAxes(g, X, Y, o) {
+  const { x0, x1, y0, y1 } = o;
+  const xt = o.xt || niceTicks(o.xd[0], o.xd[1]), yt = o.yt || niceTicks(o.yd[0], o.yd[1]);
+  for (const t of yt) { sv("line", { x1: x0, x2: x1, y1: Y(t), y2: Y(t), class: "grid" }, g);
+    sv("text", { x: x0 - 6, y: Y(t) + 4, "text-anchor": "end" }, g).textContent = o.yfmt ? o.yfmt(t) : fmt(t, 3); }
+  for (const t of xt) { sv("line", { x1: X(t), x2: X(t), y1: y0, y2: y0 + 4, class: "axis" }, g);
+    sv("text", { x: X(t), y: y0 + 17, "text-anchor": "middle" }, g).textContent = o.xfmt ? o.xfmt(t) : fmt(t, 3); }
+  sv("line", { x1: x0, x2: x1, y1: y0, y2: y0, class: "axis" }, g);
+  sv("line", { x1: x0, x2: x0, y1: y0, y2: y1, class: "axis" }, g);
+  if (o.xlab) sv("text", { x: (x0 + x1) / 2, y: y0 + 36, "text-anchor": "middle" }, g).textContent = o.xlab;
+  if (o.ylab) { const t = sv("text", { x: 0, y: 0, "text-anchor": "middle", transform: `translate(${x0 - 46},${(y0 + y1) / 2}) rotate(-90)` }, g); t.textContent = o.ylab; }
+}
+
+/* ---------- stepper: prev / next / reset with aria-live narration ---------- */
+class Stepper {
+  constructor(root, { onRender, total, labels = {} }) {
+    this.i = 0; this.onRender = onRender; this.total = total;
+    this.prev = el("button", { type: "button", onclick: () => this.go(this.i - 1) }, labels.prev || "◀ Back");
+    this.next = el("button", { type: "button", class: "primary", onclick: () => this.go(this.i + 1) }, labels.next || "Next ▶");
+    this.reset = el("button", { type: "button", onclick: () => this.go(0) }, "Start over");
+    this.count = el("span", { class: "stepcount", "aria-hidden": "true" });
+    root.append(this.prev, this.next, this.reset, this.count);
+  }
+  setTotal(n) { this.total = n; this.go(Math.min(this.i, n - 1)); }
+  go(i) {
+    this.i = Math.max(0, Math.min(this.total - 1, i));
+    this.prev.disabled = this.i === 0; this.next.disabled = this.i === this.total - 1;
+    this.count.textContent = `Step ${this.i + 1} of ${this.total}`;
+    this.onRender(this.i);
+  }
+}
+
+/* announce helper for sliders etc. (debounced) */
+function makeAnnouncer(node) { let t; return msg => { clearTimeout(t); t = setTimeout(() => { node.textContent = msg; }, 350); }; }
+
+</script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<div class="wrap">
+<header class="site"><p class="crumb"><a href="index.html">Solving Linear Systems &mdash; explorers</a></p><p class="crumb">MATH/CCM 472/572 &middot; Solving Linear Systems</p></header>
+<main id="main">
+<!-- title: Norms and Conditioning -->
+<!-- desc: See vector and matrix norms as shapes and stretches, then watch an ill-conditioned system amplify a tiny change. -->
+<h1>Norms and condition numbers</h1>
+<p class="lede">Pivoting fixes what the <em>algorithm</em> can break. It can&rsquo;t fix a <em>problem</em> that is sensitive in itself, and the condition number measures that sensitivity before you compute anything. To define it, you first need a way to measure size.</p>
+
+<nav class="toc panel" aria-label="On this page"><ol>
+  <li><a href="#vec">Vector norms: three ways to measure size</a></li>
+  <li><a href="#mat">Matrix norms: the largest stretch</a></li>
+  <li><a href="#cond">Condition number: two nearly parallel lines</a></li>
+</ol></nav>
+
+<h2 id="vec">Vector norms: three ways to measure size</h2>
+<p>Drag the point <i>x</i> (or focus it and use the arrow keys). Each norm draws its own &ldquo;circle&rdquo; through <i>x</i>: all the points of the same size as <i>x</i> in that norm.</p>
+<div class="row">
+  <div class="col" style="flex-basis:22rem">
+    <svg id="vplot" class="plot" viewBox="0 0 360 360" role="group" aria-label="Plane with the vector x and the norm balls through it"></svg>
+  </div>
+  <div class="col">
+    <dl class="kv readout" id="vread" aria-live="polite"></dl>
+    <div class="legend" style="margin-top:.75rem">
+      <span><span class="chip" style="background:var(--s2)"></span>1-norm: diamond</span>
+      <span><span class="chip" style="background:var(--s1)"></span>2-norm: circle</span>
+      <span><span class="chip" style="background:var(--s3)"></span>&infin;-norm: square</span>
+    </div>
+    <p>The 1-norm adds up every error, the 2-norm is ordinary distance, and the &infin;-norm reports only the single worst coordinate, which is what an engineer means by a <em>tolerance</em>. They always satisfy &#8214;<i>x</i>&#8214;<sub>&infin;</sub> &le; &#8214;<i>x</i>&#8214;<sub>2</sub> &le; &#8214;<i>x</i>&#8214;<sub>1</sub>. Drag <i>x</i> onto an axis to see when they tie.</p>
+  </div>
+</div>
+
+<h2 id="mat">Matrix norms: the largest stretch</h2>
+<p>An induced matrix norm answers &ldquo;how much can <i>A</i> stretch a vector, at most?&rdquo;: &#8214;<i>A</i>&#8214; = max &#8214;<i>Ax</i>&#8214; over all <i>x</i> with &#8214;<i>x</i>&#8214; = 1. Below, the unit ball of the chosen norm (faint) is mapped by <i>A</i> to the shape drawn in blue. The farthest point of the image, measured in the same norm, is the matrix norm.</p>
+<div class="controls">
+  <fieldset style="border:none;padding:0;margin:0;display:flex;gap:.75rem;align-items:center"><legend class="sr-only">Norm</legend>
+    <label><input type="radio" name="mp" value="1"> 1-norm</label>
+    <label><input type="radio" name="mp" value="2" checked> 2-norm</label>
+    <label><input type="radio" name="mp" value="inf"> &infin;-norm</label></fieldset>
+  <label for="mpreset">Matrix</label>
+  <select id="mpreset"><option value="a">[[2, 1], [1, 1.5]]</option><option value="b">[[1.5, 0], [0, 0.5]]</option><option value="c">[[1, 1], [1, 1.1]] (nearly singular)</option><option value="d">[[0, −1], [1, 0]] (rotation)</option></select>
+</div>
+<div class="controls" aria-label="Edit the matrix entries">
+  <span><i>A</i> =</span>
+  <input type="number" step="0.1" id="a11" aria-label="a11"><input type="number" step="0.1" id="a12" aria-label="a12">
+  <span style="width:.5rem"></span>
+  <input type="number" step="0.1" id="a21" aria-label="a21"><input type="number" step="0.1" id="a22" aria-label="a22">
+</div>
+<div class="row">
+  <div class="col" style="flex-basis:22rem"><svg id="mplot" class="plot" viewBox="0 0 360 360" role="img" aria-label="Unit ball and its image under A"></svg></div>
+  <div class="col">
+    <dl class="kv readout" id="mread" aria-live="polite"></dl>
+    <p class="figcap">The 1- and &infin;-norms have formulas you can read off the entries: the largest absolute column sum and the largest absolute row sum. The 2-norm has no such shortcut. The circle maps to an ellipse, and &#8214;<i>A</i>&#8214;<sub>2</sub> is its longest semi-axis, the largest <em>singular value</em>. You&rsquo;ll meet that ellipse again with the SVD.</p>
+  </div>
+</div>
+
+<h2 id="cond">Condition number: two nearly parallel lines</h2>
+<p>Each equation of a 2&times;2 system is a line, and the solution is where they cross. When the lines are nearly parallel, a tiny nudge to one of them slides the crossing point a long way. The condition number, cond(<i>A</i>) = &#8214;<i>A</i>&#8214;&#8214;<i>A</i><sup>&minus;1</sup>&#8214;, measures exactly this: it bounds how much a relative change in <i>b</i> can be amplified in <i>x</i>.</p>
+<p class="math" style="text-align:center;font-size:1.05rem" id="sysline"></p>
+<div class="controls">
+  <label for="sl">How parallel: <i>s</i> = <span id="slv"></span></label>
+  <input type="range" id="sl" min="0" max="12" step="1" value="11">
+</div>
+<div class="controls">
+  <label for="db">Nudge the second right-hand side by &delta; = <span id="dbv"></span></label>
+  <input type="range" id="db" min="-100" max="100" step="1" value="50">
+  <button type="button" id="dbz">&delta; = 0</button>
+</div>
+<div class="row">
+  <div class="col" style="flex-basis:22rem"><svg id="lplot" class="plot" viewBox="0 0 400 360" role="img" aria-label="Two lines and their intersection"></svg>
+    <div class="legend"><span><span class="chip" style="background:var(--ink-3)"></span>original solution (&delta; = 0)</span><span><span class="chip" style="background:var(--s2)"></span>after the nudge</span></div></div>
+  <div class="col"><dl class="kv readout" id="lread" aria-live="polite"></dl></div>
+</div>
+<p>The bound &#8214;&delta;<i>x</i>&#8214;/&#8214;<i>x</i>&#8214; &le; cond(<i>A</i>)&thinsp;&#8214;&delta;<i>b</i>&#8214;/&#8214;<i>b</i>&#8214; is a worst case over all directions of &delta;<i>b</i>. A particular nudge can come close to it or stay well under it. <strong>Rule of thumb:</strong> doubles carry about 16 digits, and just storing <i>b</i> perturbs it at the 10<sup>&minus;16</sup> level, so cond(<i>A</i>) &asymp; 10<sup><i>k</i></sup> means expect to lose about <i>k</i> of those 16 digits, however carefully you compute.</p>
+
+<script>
+(() => {
+  const nrm = { 1: LA.norm1, 2: LA.norm2, inf: LA.normInf };
+  /* ---------------- vector norms ---------------- */
+  const W = 360, P = 20, R = 2.2, X = scale(-R, R, P, W - P), Y = scale(-R, R, W - P, P);
+  const vs = $("#vplot");
+  const grid = g => { for (let t = -2; t <= 2; t++) { sv("line", { x1: X(t), x2: X(t), y1: Y(-R), y2: Y(R), class: "grid" }, g); sv("line", { x1: X(-R), x2: X(R), y1: Y(t), y2: Y(t), class: "grid" }, g); }
+    sv("line", { x1: X(-R), x2: X(R), y1: Y(0), y2: Y(0), class: "axis" }, g); sv("line", { x1: X(0), x2: X(0), y1: Y(-R), y2: Y(R), class: "axis" }, g);
+    [-2, -1, 1, 2].forEach(t => { sv("text", { x: X(t), y: Y(0) + 14, "text-anchor": "middle" }, g).textContent = t; sv("text", { x: X(0) - 6, y: Y(t) + 4, "text-anchor": "end" }, g).textContent = t; }); };
+  grid(vs);
+  const ball = (p, r) => { // polygon points of the p-ball of radius r
+    if (p === "1") return [[r, 0], [0, r], [-r, 0], [0, -r]];
+    if (p === "inf") return [[r, r], [-r, r], [-r, -r], [r, -r]];
+    return Array.from({ length: 120 }, (_, k) => [r * Math.cos(k * Math.PI / 60), r * Math.sin(k * Math.PI / 60)]);
+  };
+  const poly = (pts, g, attrs) => sv("polygon", Object.assign({ points: pts.map(([a, b]) => X(a).toFixed(1) + "," + Y(b).toFixed(1)).join(" "), fill: "none" }, attrs), g);
+  const gB = sv("g", {}, vs), gV = sv("g", {}, vs);
+  let xv = [1.2, 0.7];
+  const COL = { "1": "var(--s2)", "2": "var(--s1)", "inf": "var(--s3)" };
+  function renderV() {
+    gB.innerHTML = ""; gV.innerHTML = "";
+    for (const p of ["1", "2", "inf"]) poly(ball(p, nrm[p](xv)), gB, { stroke: COL[p], "stroke-width": 2 });
+    sv("line", { x1: X(0), y1: Y(0), x2: X(xv[0]), y2: Y(xv[1]), stroke: "var(--ink)", "stroke-width": 2 }, gV);
+    const g = sv("g", { tabindex: 0, role: "button", id: "vx", "aria-label": `Vector x = (${fmt(xv[0], 2)}, ${fmt(xv[1], 2)}). Arrow keys move it.` }, gV);
+    sv("circle", { cx: X(xv[0]), cy: Y(xv[1]), r: 16, fill: "transparent" }, g);
+    sv("circle", { cx: X(xv[0]), cy: Y(xv[1]), r: 7, fill: "var(--ink)", stroke: "var(--bg)", "stroke-width": 2 }, g);
+    g.style.cursor = "grab";
+    sv("text", { x: X(xv[0]) + 10, y: Y(xv[1]) - 10, style: "font-style:italic;font-size:14px" }, gV).textContent = "x";
+    $("#vread").innerHTML = `<dt><i>x</i></dt><dd>(${fmt(xv[0], 2)}, ${fmt(xv[1], 2)})</dd><dt>&#8214;<i>x</i>&#8214;<sub>1</sub> = |<i>x</i><sub>1</sub>| + |<i>x</i><sub>2</sub>|</dt><dd>${fmt(LA.norm1(xv), 3)}</dd>
+      <dt>&#8214;<i>x</i>&#8214;<sub>2</sub> = &radic;(<i>x</i><sub>1</sub>&sup2; + <i>x</i><sub>2</sub>&sup2;)</dt><dd>${fmt(LA.norm2(xv), 3)}</dd><dt>&#8214;<i>x</i>&#8214;<sub>&infin;</sub> = max |<i>x<sub>i</sub></i>|</dt><dd>${fmt(LA.normInf(xv), 3)}</dd>`;
+  }
+  let dragV = false;
+  const toData = (svg, e, XX, YY, WW, HH) => { const r = svg.getBoundingClientRect(); return [XX.inv((e.clientX - r.left) * WW / r.width), YY.inv((e.clientY - r.top) * HH / r.height)]; };
+  const clampR = v => Math.max(-2, Math.min(2, Math.round(v * 20) / 20));
+  vs.addEventListener("pointerdown", e => { if (!e.target.closest("#vx")) return; dragV = true; vs.setPointerCapture(e.pointerId); e.preventDefault(); });
+  vs.addEventListener("pointermove", e => { if (!dragV) return; const [a, b] = toData(vs, e, X, Y, W, W); xv = [clampR(a), clampR(b)]; renderV(); });
+  vs.addEventListener("pointerup", () => { if (dragV) { dragV = false; renderV(); $("#vx").focus({ preventScroll: true }); } });
+  vs.addEventListener("keydown", e => { if (!e.target.closest("#vx")) return; const d = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, 1], ArrowDown: [0, -1] }[e.key]; if (!d) return;
+    e.preventDefault(); const s = e.shiftKey ? 0.5 : 0.1; xv = [clampR(xv[0] + d[0] * s), clampR(xv[1] + d[1] * s)]; renderV(); $("#vx").focus(); });
+  renderV();
+
+  /* ---------------- matrix norms ---------------- */
+  const PRE = { a: [[2, 1], [1, 1.5]], b: [[1.5, 0], [0, 0.5]], c: [[1, 1], [1, 1.1]], d: [[0, -1], [1, 0]] };
+  const ms = $("#mplot"), R2 = 3.4, MX = scale(-R2, R2, P, W - P), MY = scale(-R2, R2, W - P, P);
+  function renderM() {
+    const A = [[+$("#a11").value, +$("#a12").value], [+$("#a21").value, +$("#a22").value]], p = $("input[name=mp]:checked").value;
+    ms.innerHTML = "";
+    for (let t = -3; t <= 3; t++) { sv("line", { x1: MX(t), x2: MX(t), y1: MY(-R2), y2: MY(R2), class: "grid" }, ms); sv("line", { x1: MX(-R2), x2: MX(R2), y1: MY(t), y2: MY(t), class: "grid" }, ms); }
+    sv("line", { x1: MX(-R2), x2: MX(R2), y1: MY(0), y2: MY(0), class: "axis" }, ms); sv("line", { x1: MX(0), x2: MX(0), y1: MY(-R2), y2: MY(R2), class: "axis" }, ms);
+    const pp = (pts, attrs) => sv("polygon", Object.assign({ points: pts.map(([a, b]) => MX(a).toFixed(1) + "," + MY(b).toFixed(1)).join(" "), fill: "none" }, attrs), ms);
+    // dense boundary of the unit ball (so vertices are included for 1 and inf)
+    const B = [], V = ball(p, 1); for (let k = 0; k < V.length; k++) { const a = V[k], b = V[(k + 1) % V.length]; for (let t = 0; t < 30; t++) B.push([a[0] + (b[0] - a[0]) * t / 30, a[1] + (b[1] - a[1]) * t / 30]); }
+    const img = B.map(v => LA.mv(A, v));
+    pp(B, { stroke: "var(--ink-3)", "stroke-dasharray": "4 3", "stroke-width": 1.5 });
+    pp(img, { stroke: "var(--s1)", "stroke-width": 2.5, fill: "var(--s1)", "fill-opacity": .08 });
+    let best = 0; img.forEach((w, k) => { if (nrm[p](w) > nrm[p](img[best])) best = k; });
+    const w = img[best], v = B[best];
+    sv("line", { x1: MX(0), y1: MY(0), x2: MX(v[0]), y2: MY(v[1]), stroke: "var(--ink-3)", "stroke-width": 2 }, ms);
+    sv("line", { x1: MX(0), y1: MY(0), x2: MX(w[0]), y2: MY(w[1]), stroke: "var(--s2)", "stroke-width": 2.5 }, ms);
+    sv("circle", { cx: MX(w[0]), cy: MY(w[1]), r: 5, fill: "var(--s2)" }, ms);
+    sv("text", { x: MX(w[0]) + 8, y: MY(w[1]) - 8 }, ms).textContent = "Ax (largest)";
+    const det = A[0][0] * A[1][1] - A[0][1] * A[1][0];
+    const exact = p === "1" ? LA.matNorm1(A) : p === "inf" ? LA.matNormInf(A) : LA.svals(A)[0];
+    let condTxt = "∞ (singular)";
+    if (Math.abs(det) > 1e-14) { const Ai = [[A[1][1] / det, -A[0][1] / det], [-A[1][0] / det, A[0][0] / det]];
+      const ni = p === "1" ? LA.matNorm1(Ai) : p === "inf" ? LA.matNormInf(Ai) : 1 / LA.svals(A)[1]; condTxt = fmt(exact * ni, 4); }
+    const pl = p === "inf" ? "∞" : p;
+    $("#mread").innerHTML = `<dt>Unit vector stretched most</dt><dd>(${fmt(v[0], 3)}, ${fmt(v[1], 3)})</dd><dt>its image <i>Ax</i></dt><dd>(${fmt(w[0], 3)}, ${fmt(w[1], 3)})</dd>
+      <dt>&#8214;<i>A</i>&#8214;<sub>${pl}</sub></dt><dd><strong>${fmt(exact, 4)}</strong>${p === "1" ? " (largest column sum)" : p === "inf" ? " (largest row sum)" : " (largest singular value)"}</dd>
+      <dt>cond<sub>${pl}</sub>(<i>A</i>)</dt><dd>${condTxt}</dd>`;
+    ms.setAttribute("aria-label", `Unit ball of the ${pl}-norm and its image under A. The norm of A is ${fmt(exact, 4)}.`);
+  }
+  function loadM(k) { const A = PRE[k]; $("#a11").value = A[0][0]; $("#a12").value = A[0][1]; $("#a21").value = A[1][0]; $("#a22").value = A[1][1]; renderM(); }
+  $("#mpreset").addEventListener("change", e => loadM(e.target.value));
+  ["a11", "a12", "a21", "a22"].forEach(id => $("#" + id).addEventListener("input", renderM));
+  $$("input[name=mp]").forEach(r => r.addEventListener("change", renderM));
+  loadM("a");
+
+  /* ---------------- nearly parallel lines ---------------- */
+  const LW = 400, LH = 360, LP = { l: 40, r: 12, t: 12, b: 36 }, LX = scale(-1, 4, LP.l, LW - LP.r), LY = scale(-1.5, 4, LH - LP.b, LP.t);
+  const ls = $("#lplot");
+  function renderL() {
+    const s = [1, 0.5, 0.2, 0.1, 0.05, 0.02, 0.01, 0.005, 0.002, 0.001, 5e-4, 2e-4, 1e-4][+$("#sl").value], d = +$("#db").value * s * 5 / 100;   // nudge range scales with s so the effect stays visible
+    $("#slv").textContent = fmt(s, 4); $("#dbv").textContent = d === 0 ? "0" : fmt(d, 3);
+    $("#sysline").innerHTML = `2<i>x</i><sub>1</sub> + <i>x</i><sub>2</sub> = 5, &nbsp;&nbsp; 2<i>x</i><sub>1</sub> + (1 + <i>s</i>)<i>x</i><sub>2</sub> = 5 + &delta;`;
+    const A = [[2, 1], [2, 1 + s]], b0 = [5, 5], b1 = [5, 5 + d], x0 = LA.solve(A, b0), x1 = LA.solve(A, b1);
+    ls.innerHTML = "";
+    drawAxes(ls, LX, LY, { x0: LP.l, x1: LW - LP.r, y0: LH - LP.b, y1: LP.t, xd: [-1, 4], yd: [-1.5, 4], xlab: "x₁", ylab: "x₂" });
+    const cp = sv("clipPath", { id: "clipL" }, sv("defs", {}, ls)); sv("rect", { x: LP.l, y: LP.t, width: LW - LP.l - LP.r, height: LH - LP.t - LP.b }, cp);
+    const g = sv("g", { "clip-path": "url(#clipL)" }, ls);
+    const seg = (f, col, w, dash) => sv("line", { x1: LX(-1), y1: LY(f(-1)), x2: LX(4), y2: LY(f(4)), stroke: col, "stroke-width": w, "stroke-dasharray": dash || "" }, g);
+    seg(t => 5 - 2 * t, "var(--s1)", 2.5);
+    seg(t => (5 - 2 * t) / (1 + s), "var(--ink-3)", 1.5, "5 4");
+    if (d !== 0) seg(t => (5 + d - 2 * t) / (1 + s), "var(--s2)", 2.5);
+    sv("circle", { cx: LX(x0[0]), cy: LY(x0[1]), r: 6, fill: "var(--bg)", stroke: "var(--ink-3)", "stroke-width": 2.5 }, g);
+    const off = x1[0] < -1 || x1[0] > 4 || x1[1] < -1.5 || x1[1] > 4;
+    if (d !== 0 && !off) sv("circle", { cx: LX(x1[0]), cy: LY(x1[1]), r: 6, fill: "var(--s2)", stroke: "var(--bg)", "stroke-width": 2 }, g);
+    if (d !== 0 && off) sv("text", { x: LW - LP.r - 6, y: LP.t + 16, "text-anchor": "end", style: "fill:var(--s2);font-weight:600" }, ls).textContent = `new crossing is off the chart at (${fmt(x1[0], 3)}, ${fmt(x1[1], 3)})`;
+    const k = LA.cond2(A), rb = LA.norm2(LA.sub(b1, b0)) / LA.norm2(b0), rx = LA.norm2(LA.sub(x1, x0)) / LA.norm2(x0);
+    $("#lread").innerHTML = `<dt>cond(<i>A</i>)</dt><dd><strong>${fmt(k, 4)}</strong></dd>
+      <dt>digits at risk (&asymp; log<sub>10</sub> cond)</dt><dd>${fmt(Math.log10(k), 2)} of ~16</dd>
+      <dt>solution, &delta; = 0</dt><dd>(${fmt(x0[0], 4)}, ${fmt(x0[1], 4)})</dd>
+      <dt>solution after nudge</dt><dd>(${fmt(x1[0], 4)}, ${fmt(x1[1], 4)})</dd>
+      <dt>relative change in <i>b</i></dt><dd>${d === 0 ? "0" : fmt(100 * rb, 3) + "%"}</dd>
+      <dt>relative change in <i>x</i></dt><dd class="${rx > 10 * rb && d ? "bad" : ""}">${d === 0 ? "0" : fmt(100 * rx, 3) + "%"}</dd>
+      <dt>amplification</dt><dd>${d === 0 ? "—" : fmt(rx / rb, 4) + "&times;"}</dd>
+      <dt>bound: cond &times; rel. change in <i>b</i></dt><dd>${d === 0 ? "—" : fmt(100 * k * rb, 3) + "%"}</dd>`;
+  }
+  ["sl", "db"].forEach(id => $("#" + id).addEventListener("input", renderL));
+  $("#dbz").addEventListener("click", () => { $("#db").value = 0; renderL(); });
+  renderL();
+})();
+</script>
+
+</main>
+<footer class="site">Interactive companion to the course notes. Every number on this page is computed live in your browser in IEEE double precision &mdash; the same arithmetic NumPy uses.</footer>
+</div>
+</body>
+</html>

@@ -1,0 +1,595 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LU Step by Step</title>
+<meta name="description" content="Step through Gaussian elimination, watch the multipliers become L, then solve several systems with one factorization.">
+<style>
+:root {
+  color-scheme: light;
+  --bg: #fcfcfb;
+  --surface: #f3f2ef;
+  --ink: #111110;
+  --ink-2: #4a4946;
+  --ink-3: #6b6a66;
+  --rule: #d9d7d1;
+  --accent: #1f64b8;
+  --s1: #2a78d6;      /* blue: active row / series 1 */
+  --s2: #c9501f;      /* orange: pivot / series 2 */
+  --s3: #13875e;      /* aqua-green: L entries / series 3 */
+  --t1: #dbe8f8;      /* tints for cell highlights */
+  --t2: #fbe1d4;
+  --t3: #d5efe3;
+  --t4: #f5ecc8;
+  --focus: #1f64b8;
+  --maxw: 60rem;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #1a1a19;
+    --surface: #242422;
+    --ink: #f4f3ef;
+    --ink-2: #c3c2b7;
+    --ink-3: #a3a29a;
+    --rule: #3d3c39;
+    --accent: #7fb2f0;
+    --s1: #5a9cec;
+    --s2: #f08a5d;
+    --s3: #3cc392;
+    --t1: #1e3450;
+    --t2: #4a2a1b;
+    --t3: #173d2f;
+    --t4: #423a17;
+    --focus: #7fb2f0;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #1a1a19; --surface: #242422; --ink: #f4f3ef; --ink-2: #c3c2b7; --ink-3: #a3a29a;
+  --rule: #3d3c39; --accent: #7fb2f0; --s1: #5a9cec; --s2: #f08a5d; --s3: #3cc392;
+  --t1: #1e3450; --t2: #4a2a1b; --t3: #173d2f; --t4: #423a17; --focus: #7fb2f0;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html { background: var(--bg); }
+body {
+  margin: 0; background: var(--bg); color: var(--ink);
+  font: 17px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+.wrap { max-width: var(--maxw); margin: 0 auto; padding: 1.5rem 16px 4rem; }
+header.site { border-bottom: 1px solid var(--rule); margin-bottom: 2rem; padding-bottom: 1rem; }
+header.site .crumb { font-size: .9rem; color: var(--ink-3); margin: 0 0 .25rem; }
+header.site .crumb a { color: var(--ink-3); }
+h1 { font-size: 1.9rem; line-height: 1.2; margin: 0 0 .5rem; letter-spacing: -.01em; }
+h2 { font-size: 1.35rem; margin: 3rem 0 .5rem; line-height: 1.3; }
+h3 { font-size: 1.1rem; margin: 1.75rem 0 .4rem; }
+p { margin: .6rem 0; }
+.lede { font-size: 1.08rem; color: var(--ink-2); max-width: 44rem; }
+.muted { color: var(--ink-3); }
+a { color: var(--accent); }
+:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; border-radius: 3px; }
+.skip { position: absolute; left: -9999px; }
+.skip:focus { left: 1rem; top: 1rem; background: var(--bg); padding: .5rem; z-index: 10; }
+.panel { background: var(--surface); border-radius: 10px; padding: 1rem 1.1rem; margin: 1rem 0; overflow-x: auto; }
+.row { display: flex; flex-wrap: wrap; gap: 1.25rem; align-items: flex-start; }
+.col { flex: 1 1 18rem; min-width: 0; }
+.controls { display: flex; flex-wrap: wrap; gap: .5rem .75rem; align-items: center; margin: .75rem 0; }
+button, select, input[type=number], input[type=text] {
+  font: inherit; font-size: .95rem; color: var(--ink); background: var(--bg);
+  border: 1px solid var(--rule); border-radius: 7px; padding: .35rem .75rem; min-height: 2.25rem;
+}
+button { cursor: pointer; }
+button:hover:not(:disabled) { border-color: var(--ink-3); }
+button:disabled { opacity: .45; cursor: default; }
+button.primary { background: var(--accent); color: var(--bg); border-color: var(--accent); }
+input[type=number] { width: 5.5rem; }
+input[type=range] { accent-color: var(--accent); width: min(18rem, 100%); }
+label { font-size: .95rem; }
+.narr {
+  min-height: 4.5rem; border-left: 3px solid var(--accent); padding: .35rem .9rem; margin: .75rem 0;
+  background: var(--bg); border-radius: 0 6px 6px 0;
+}
+.narr strong { color: var(--ink); }
+.stepcount { font-size: .88rem; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.readout { font-variant-numeric: tabular-nums; }
+.readout dt { color: var(--ink-3); font-size: .88rem; }
+.readout dd { margin: 0 0 .5rem; font-size: 1.05rem; }
+.kv { display: grid; grid-template-columns: minmax(7rem, 48%) minmax(0, 1fr); gap: .15rem 1rem; font-variant-numeric: tabular-nums; }
+.kv > :nth-child(odd) { color: var(--ink-3); }
+.mono, code { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: .92em; }
+.math { font-family: "Cambria Math", "STIX Two Math", "Latin Modern Math", Georgia, serif; font-style: normal; }
+.math i, i.v { font-style: italic; }
+/* matrices */
+.mats { display: flex; flex-wrap: wrap; gap: 1rem 1.5rem; align-items: center; margin: .75rem 0; }
+.matwrap { display: inline-flex; flex-direction: column; align-items: center; gap: .2rem; }
+.matwrap .cap { font-size: .9rem; color: var(--ink-3); }
+table.mat { border-collapse: separate; border-spacing: 2px; position: relative; padding: 0 6px;
+  font-variant-numeric: tabular-nums; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: .92rem; }
+table.mat::before, table.mat::after { content: ""; position: absolute; top: 0; bottom: 0; width: 6px;
+  border: 1.5px solid var(--ink-2); }
+table.mat::before { left: 0; border-right: none; }
+table.mat::after { right: 0; border-left: none; }
+table.mat td { padding: .2rem .5rem; text-align: right; min-width: 3.2rem; border-radius: 4px;
+  transition: background-color .25s; }
+table.mat td.pivot { background: var(--t2); outline: 2px solid var(--s2); }
+table.mat td.hlrow { background: var(--t1); }
+table.mat td.src { background: var(--t4); }
+table.mat td.newL { background: var(--t3); outline: 2px solid var(--s3); }
+table.mat td.zeroed { color: var(--ink-3); }
+table.mat td.dim { color: var(--ink-3); opacity: .55; }
+table.mat td.done { background: var(--t3); }
+.op { font-size: 1.3rem; color: var(--ink-3); }
+/* legend chips */
+.legend { display: flex; flex-wrap: wrap; gap: .4rem 1rem; font-size: .88rem; color: var(--ink-2); margin: .25rem 0; }
+.chip { display: inline-block; width: .9rem; height: .9rem; border-radius: 3px; vertical-align: -2px; margin-right: .3rem; }
+/* svg */
+svg.plot { width: 100%; height: auto; display: block; overflow: visible; }
+svg.plot text { fill: var(--ink-2); font: 12px system-ui, sans-serif; }
+svg.plot .axis { stroke: var(--ink-3); stroke-width: 1; }
+svg.plot .grid { stroke: var(--rule); stroke-width: 1; }
+.fig { margin: .75rem 0; }
+.figcap { font-size: .9rem; color: var(--ink-3); margin-top: .35rem; }
+details { margin: .75rem 0; }
+summary { cursor: pointer; color: var(--accent); }
+.predict { background: var(--t4); border-radius: 8px; padding: .5rem .8rem; margin: .5rem 0; }
+.good { color: var(--s3); font-weight: 600; }
+.bad { color: var(--s2); font-weight: 600; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+nav.toc { font-size: .95rem; }
+nav.toc ol { padding-left: 1.2rem; margin: .25rem 0; }
+footer.site { margin-top: 4rem; padding-top: 1rem; border-top: 1px solid var(--rule); font-size: .88rem; color: var(--ink-3); }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+@media (max-width: 560px) { body { font-size: 16px; } h1 { font-size: 1.55rem; } table.mat td { min-width: 2.4rem; padding: .15rem .3rem; } }
+
+</style>
+<script>
+/* ---------- shared helpers: numerics, formatting, DOM, SVG, stepper ---------- */
+"use strict";
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
+const el = (tag, attrs = {}, ...kids) => {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (k === "class") e.className = v; else if (k === "html") e.innerHTML = v;
+    else if (k.startsWith("on")) e.addEventListener(k.slice(2), v); else e.setAttribute(k, v);
+  }
+  for (const k of kids) if (k != null) e.append(k.nodeType ? k : document.createTextNode(k));
+  return e;
+};
+const SVGNS = "http://www.w3.org/2000/svg";
+const sv = (tag, attrs = {}, parent) => {
+  const e = document.createElementNS(SVGNS, tag);
+  for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
+  if (parent) parent.appendChild(e);
+  return e;
+};
+const cssVar = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+
+/* number formatting */
+function fmt(x, d = 4) {
+  if (!isFinite(x)) return x > 0 ? "∞" : (x < 0 ? "−∞" : "NaN");
+  if (x === 0) return "0";
+  const a = Math.abs(x);
+  let s;
+  if (a >= 1e5 || a < 1e-3) s = fmtExp(x, d);
+  else { s = (+x.toFixed(d)).toString(); }
+  return s.replace("-", "−");
+}
+function fmtExp(x, d = 3) {
+  if (x === 0) return "0";
+  const e = Math.floor(Math.log10(Math.abs(x)));
+  let m = x / Math.pow(10, e);
+  if (Math.abs(+m.toFixed(d - 1)) >= 10) { m /= 10; return fmtExp(x, d); }
+  return (+m.toFixed(d - 1)).toString().replace("-", "−") + "×10" + sup(e);
+}
+function sup(n) {
+  const m = { "-": "⁻", "0": "⁰", "1": "¹", "2": "²", "3": "³", "4": "⁴", "5": "⁵", "6": "⁶", "7": "⁷", "8": "⁸", "9": "⁹" };
+  return String(n).split("").map(c => m[c] || c).join("");
+}
+function fmtFrac(x) { // nice display for values that are near simple fractions/integers
+  if (Math.abs(x - Math.round(x)) < 1e-12) return String(Math.round(x)).replace("-", "−");
+  return fmt(x, 4);
+}
+
+/* ---------- linear algebra (dense, arrays of arrays) ---------- */
+const LA = {
+  clone: A => A.map(r => r.slice()),
+  eye: n => Array.from({ length: n }, (_, i) => Array.from({ length: n }, (_, j) => +(i === j))),
+  zeros: (m, n) => Array.from({ length: m }, () => new Array(n).fill(0)),
+  T: A => A[0].map((_, j) => A.map(r => r[j])),
+  mul(A, B) {
+    const m = A.length, k = B.length, n = B[0].length, C = LA.zeros(m, n);
+    for (let i = 0; i < m; i++) for (let p = 0; p < k; p++) { const a = A[i][p]; if (a) for (let j = 0; j < n; j++) C[i][j] += a * B[p][j]; }
+    return C;
+  },
+  mv: (A, x) => A.map(r => r.reduce((s, a, j) => s + a * x[j], 0)),
+  dot: (x, y) => x.reduce((s, a, i) => s + a * y[i], 0),
+  norm2: x => Math.hypot(...x),
+  norm1: x => x.reduce((s, a) => s + Math.abs(a), 0),
+  normInf: x => Math.max(...x.map(Math.abs)),
+  sub: (x, y) => x.map((a, i) => a - y[i]),
+  matNorm1: A => Math.max(...A[0].map((_, j) => A.reduce((s, r) => s + Math.abs(r[j]), 0))),
+  matNormInf: A => Math.max(...A.map(r => r.reduce((s, a) => s + Math.abs(a), 0))),
+  /* LU with optional partial pivoting; returns {L,U,perm,swaps} */
+  lu(A0, pivot = true) {
+    const n = A0.length, U = LA.clone(A0), L = LA.eye(n), perm = [...Array(n).keys()];
+    for (let k = 0; k < n - 1; k++) {
+      if (pivot) {
+        let p = k; for (let i = k + 1; i < n; i++) if (Math.abs(U[i][k]) > Math.abs(U[p][k])) p = i;
+        if (p !== k) { [U[k], U[p]] = [U[p], U[k]]; [perm[k], perm[p]] = [perm[p], perm[k]];
+          for (let j = 0; j < k; j++) [L[k][j], L[p][j]] = [L[p][j], L[k][j]]; }
+      }
+      for (let i = k + 1; i < n; i++) {
+        const m = U[i][k] / U[k][k]; L[i][k] = m;
+        for (let j = k; j < n; j++) U[i][j] -= m * U[k][j];
+        U[i][k] = 0;
+      }
+    }
+    return { L, U, perm };
+  },
+  fwd(L, b) { const n = b.length, y = new Array(n); for (let i = 0; i < n; i++) { let s = b[i]; for (let j = 0; j < i; j++) s -= L[i][j] * y[j]; y[i] = s / L[i][i]; } return y; },
+  back(U, y) { const n = y.length, x = new Array(n); for (let i = n - 1; i >= 0; i--) { let s = y[i]; for (let j = i + 1; j < n; j++) s -= U[i][j] * x[j]; x[i] = s / U[i][i]; } return x; },
+  solve(A, b, pivot = true) { const { L, U, perm } = LA.lu(A, pivot); return LA.back(U, LA.fwd(L, perm.map(i => b[i]))); },
+  /* Gauss–Jordan inverse with partial pivoting (the usual textbook inverse) */
+  inv(A0) {
+    const n = A0.length, M = A0.map((r, i) => [...r, ...LA.eye(n)[i]]);
+    for (let k = 0; k < n; k++) {
+      let p = k; for (let i = k + 1; i < n; i++) if (Math.abs(M[i][k]) > Math.abs(M[p][k])) p = i;
+      [M[k], M[p]] = [M[p], M[k]];
+      const d = M[k][k]; for (let j = 0; j < 2 * n; j++) M[k][j] /= d;
+      for (let i = 0; i < n; i++) if (i !== k) { const m = M[i][k]; if (m) for (let j = 0; j < 2 * n; j++) M[i][j] -= m * M[k][j]; }
+    }
+    return M.map(r => r.slice(n));
+  },
+  /* Cholesky solve (for normal equations) */
+  cholSolve(A, b) {
+    const n = A.length, L = LA.zeros(n, n);
+    for (let j = 0; j < n; j++) {
+      let s = A[j][j]; for (let k = 0; k < j; k++) s -= L[j][k] * L[j][k];
+      if (!(s > 0)) return null;
+      L[j][j] = Math.sqrt(s);
+      for (let i = j + 1; i < n; i++) { let t = A[i][j]; for (let k = 0; k < j; k++) t -= L[i][k] * L[j][k]; L[i][j] = t / L[j][j]; }
+    }
+    const y = LA.fwd(L, b); return LA.back(LA.T(L), y);
+  },
+  /* Householder QR least squares: returns x minimising ||Ax-b|| */
+  qrSolve(A0, b0) {
+    const m = A0.length, n = A0[0].length, A = LA.clone(A0), b = b0.slice();
+    for (let k = 0; k < n; k++) {
+      let nr = 0; for (let i = k; i < m; i++) nr += A[i][k] * A[i][k]; nr = Math.sqrt(nr);
+      if (nr === 0) continue;
+      const alpha = A[k][k] > 0 ? -nr : nr, v = new Array(m).fill(0);
+      v[k] = A[k][k] - alpha; for (let i = k + 1; i < m; i++) v[i] = A[i][k];
+      let vv = 0; for (let i = k; i < m; i++) vv += v[i] * v[i];
+      if (vv === 0) continue;
+      for (let j = k; j < n; j++) { let s = 0; for (let i = k; i < m; i++) s += v[i] * A[i][j]; s = 2 * s / vv; for (let i = k; i < m; i++) A[i][j] -= s * v[i]; }
+      let s = 0; for (let i = k; i < m; i++) s += v[i] * b[i]; s = 2 * s / vv; for (let i = k; i < m; i++) b[i] -= s * v[i];
+    }
+    const R = A.slice(0, n).map(r => r.slice(0, n));
+    return LA.back(R, b.slice(0, n));
+  },
+  /* singular values via one-sided Jacobi (accurate for small dense matrices) */
+  svals(A0) {
+    const m = A0.length, n = A0[0].length;
+    let U = A0.map(r => r.slice());
+    if (m < n) U = LA.T(U);
+    const cols = U[0].length, rows = U.length;
+    for (let sweep = 0; sweep < 60; sweep++) {
+      let off = 0;
+      for (let p = 0; p < cols - 1; p++) for (let q = p + 1; q < cols; q++) {
+        let a = 0, b = 0, c = 0;
+        for (let i = 0; i < rows; i++) { a += U[i][p] * U[i][p]; b += U[i][q] * U[i][q]; c += U[i][p] * U[i][q]; }
+        if (Math.abs(c) <= 1e-15 * Math.sqrt(a * b)) continue;
+        off = Math.max(off, Math.abs(c) / Math.sqrt(a * b));
+        const z = (b - a) / (2 * c), t = Math.sign(z || 1) / (Math.abs(z) + Math.sqrt(1 + z * z));
+        const cs = 1 / Math.sqrt(1 + t * t), sn = cs * t;
+        for (let i = 0; i < rows; i++) { const up = U[i][p], uq = U[i][q]; U[i][p] = cs * up - sn * uq; U[i][q] = sn * up + cs * uq; }
+      }
+      if (off < 1e-15) break;
+    }
+    const s = []; for (let j = 0; j < cols; j++) { let t = 0; for (let i = 0; i < rows; i++) t += U[i][j] * U[i][j]; s.push(Math.sqrt(t)); }
+    return s.sort((a, b) => b - a);
+  },
+  cond2(A) { const s = LA.svals(A); return s[0] / s[s.length - 1]; },
+};
+
+/* seeded PRNG so every student sees the same "random" numbers */
+function mulberry32(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+
+/* ---------- matrix rendering ---------- */
+/* cls(i,j) -> class name; fmtf(v,i,j) -> string */
+function matTable(M, { label = "matrix", cls = () => "", fmtf = v => fmtFrac(v), cap = null } = {}) {
+  const t = el("table", { class: "mat", "aria-label": `${label}, ${M.length} by ${M[0].length}` });
+  const tb = el("tbody"); t.append(tb);
+  M.forEach((r, i) => { const tr = el("tr"); r.forEach((v, j) => { const c = cls(i, j); tr.append(el("td", c ? { class: c } : {}, fmtf(v, i, j))); }); tb.append(tr); });
+  const w = el("div", { class: "matwrap" }, t);
+  if (cap) w.append(el("div", { class: "cap", html: cap }));
+  return w;
+}
+const colVec = x => x.map(v => [v]);
+
+/* ---------- linear scale + axes ---------- */
+function scale(d0, d1, r0, r1, log = false) {
+  if (log) { const a = Math.log10(d0), b = Math.log10(d1); const f = v => r0 + (Math.log10(v) - a) / (b - a) * (r1 - r0); f.inv = p => Math.pow(10, a + (p - r0) / (r1 - r0) * (b - a)); return f; }
+  const f = v => r0 + (v - d0) / (d1 - d0) * (r1 - r0); f.inv = p => d0 + (p - r0) / (r1 - r0) * (d1 - d0); return f;
+}
+function niceTicks(a, b, n = 6) {
+  const span = b - a, step0 = span / n, mag = Math.pow(10, Math.floor(Math.log10(step0)));
+  const step = [1, 2, 2.5, 5, 10].map(s => s * mag).find(s => span / s <= n) || 10 * mag;
+  const out = []; for (let v = Math.ceil(a / step) * step; v <= b + 1e-9 * step; v += step) out.push(+v.toFixed(10));
+  return out;
+}
+/* axes(svg, X, Y, {xt, yt, xlab, ylab, W, H, pad, log flags}) */
+function drawAxes(g, X, Y, o) {
+  const { x0, x1, y0, y1 } = o;
+  const xt = o.xt || niceTicks(o.xd[0], o.xd[1]), yt = o.yt || niceTicks(o.yd[0], o.yd[1]);
+  for (const t of yt) { sv("line", { x1: x0, x2: x1, y1: Y(t), y2: Y(t), class: "grid" }, g);
+    sv("text", { x: x0 - 6, y: Y(t) + 4, "text-anchor": "end" }, g).textContent = o.yfmt ? o.yfmt(t) : fmt(t, 3); }
+  for (const t of xt) { sv("line", { x1: X(t), x2: X(t), y1: y0, y2: y0 + 4, class: "axis" }, g);
+    sv("text", { x: X(t), y: y0 + 17, "text-anchor": "middle" }, g).textContent = o.xfmt ? o.xfmt(t) : fmt(t, 3); }
+  sv("line", { x1: x0, x2: x1, y1: y0, y2: y0, class: "axis" }, g);
+  sv("line", { x1: x0, x2: x0, y1: y0, y2: y1, class: "axis" }, g);
+  if (o.xlab) sv("text", { x: (x0 + x1) / 2, y: y0 + 36, "text-anchor": "middle" }, g).textContent = o.xlab;
+  if (o.ylab) { const t = sv("text", { x: 0, y: 0, "text-anchor": "middle", transform: `translate(${x0 - 46},${(y0 + y1) / 2}) rotate(-90)` }, g); t.textContent = o.ylab; }
+}
+
+/* ---------- stepper: prev / next / reset with aria-live narration ---------- */
+class Stepper {
+  constructor(root, { onRender, total, labels = {} }) {
+    this.i = 0; this.onRender = onRender; this.total = total;
+    this.prev = el("button", { type: "button", onclick: () => this.go(this.i - 1) }, labels.prev || "◀ Back");
+    this.next = el("button", { type: "button", class: "primary", onclick: () => this.go(this.i + 1) }, labels.next || "Next ▶");
+    this.reset = el("button", { type: "button", onclick: () => this.go(0) }, "Start over");
+    this.count = el("span", { class: "stepcount", "aria-hidden": "true" });
+    root.append(this.prev, this.next, this.reset, this.count);
+  }
+  setTotal(n) { this.total = n; this.go(Math.min(this.i, n - 1)); }
+  go(i) {
+    this.i = Math.max(0, Math.min(this.total - 1, i));
+    this.prev.disabled = this.i === 0; this.next.disabled = this.i === this.total - 1;
+    this.count.textContent = `Step ${this.i + 1} of ${this.total}`;
+    this.onRender(this.i);
+  }
+}
+
+/* announce helper for sliders etc. (debounced) */
+function makeAnnouncer(node) { let t; return msg => { clearTimeout(t); t = setTimeout(() => { node.textContent = msg; }, 350); }; }
+
+</script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<div class="wrap">
+<header class="site"><p class="crumb"><a href="index.html">Solving Linear Systems &mdash; explorers</a></p><p class="crumb">MATH/CCM 472/572 &middot; Solving Linear Systems</p></header>
+<main id="main">
+<!-- title: LU Step by Step -->
+<!-- desc: Step through Gaussian elimination, watch the multipliers become L, then solve several systems with one factorization. -->
+<h1><i>LU</i>, step by step</h1>
+<p class="lede">Gaussian elimination turns <i>A</i> into an upper-triangular <i>U</i> by subtracting multiples of one row from the rows below it. <i>LU</i> factorization just <em>keeps</em> those multipliers, and they fill in <i>L</i>. Step through it, then reuse the factors to solve as many systems as you like.</p>
+
+<nav class="toc panel" aria-label="On this page"><ol>
+  <li><a href="#factor">Part 1: Factor <i>A</i> = <i>LU</i></a></li>
+  <li><a href="#solve">Part 2: Solve with the factors</a></li>
+  <li><a href="#many">Part 3: Factor once, solve many</a></li>
+</ol></nav>
+
+<h2 id="factor">Part 1: Factor <i>A</i> = <i>LU</i></h2>
+<div class="controls">
+  <label for="preset">Matrix</label>
+  <select id="preset">
+    <option value="notes">Notes example (3&times;3)</option>
+    <option value="four">A 4&times;4 example</option>
+    <option value="zero">A zero pivot (needs a row swap)</option>
+    <option value="tiny">A tiny pivot (2&times;2)</option>
+    <option value="custom">Enter your own&hellip;</option>
+  </select>
+  <label><input type="checkbox" id="pivot"> Partial pivoting</label>
+  <label><input type="checkbox" id="predict"> Predict mode</label>
+</div>
+<div id="customBox" class="controls" hidden>
+  <label for="customA">Rows separated by <code>;</code></label>
+  <input type="text" id="customA" value="2 1 1; 4 3 3; 8 7 9" style="width:16rem">
+  <button type="button" id="customGo">Use this matrix</button>
+  <span id="customErr" class="bad" role="alert"></span>
+</div>
+<div class="panel">
+  <div id="fmats" class="mats"></div>
+  <div class="legend">
+    <span><span class="chip" style="background:var(--t2);outline:2px solid var(--s2)"></span>pivot</span>
+    <span><span class="chip" style="background:var(--t4)"></span>pivot row (subtracted)</span>
+    <span><span class="chip" style="background:var(--t1)"></span>row being updated</span>
+    <span><span class="chip" style="background:var(--t3);outline:2px solid var(--s3)"></span>multiplier stored in <i>L</i></span>
+  </div>
+  <div id="fnarr" class="narr" aria-live="polite"></div>
+  <div class="controls" id="fctl"></div>
+</div>
+
+<h2 id="solve">Part 2: Solve <i>A</i><i>x</i> = <i>b</i> with the factors</h2>
+<p>With <i>PA</i> = <i>LU</i> in hand, <i>A</i><i>x</i> = <i>b</i> becomes two triangular solves: <i>L</i><i>y</i> = <i>Pb</i> top to bottom (forward substitution), then <i>U</i><i>x</i> = <i>y</i> bottom to top (back substitution). Every row has exactly one new unknown, so there is no elimination left to do.</p>
+<div class="controls">
+  <label for="bsel">Right-hand side <i>b</i></label>
+  <select id="bsel"></select>
+  <button type="button" id="bnew">A new random <i>b</i></button>
+</div>
+<div class="panel">
+  <div id="smats" class="mats"></div>
+  <div id="snarr" class="narr" aria-live="polite"></div>
+  <div class="controls" id="sctl"></div>
+</div>
+
+<h2 id="many">Part 3: Factor once, solve many</h2>
+<p>Every time you finish a solve in Part 2, it counts here. Count one <em>flop</em> for each +, &minus;, &times;, &divide;.</p>
+<div class="panel">
+  <dl class="kv" id="tally"></dl>
+  <p class="figcap">For large <i>n</i>, factoring costs about &frac23;<i>n</i>&sup3; flops and each pair of triangular solves about 2<i>n</i>&sup2;. See <a href="cost.html">what LU costs</a> for how that plays out when <i>n</i> is in the thousands.</p>
+</div>
+
+<script>
+(() => {
+  const PRESETS = {
+    notes: { A: [[1, -1, 1], [1, 0, 0], [1, 1, 1]], bs: [["dataset 1: (2, 1, 4)", [2, 1, 4]], ["dataset 2: (3, 1, 0)", [3, 1, 0]]], pivot: false },
+    four: { A: [[2, 1, -1, 3], [4, 3, 0, 5], [-2, 2, 10, -5], [2, -1, 1, 9]], bs: [["(2, 6, 11, 14)", [2, 6, 11, 14]]], pivot: false },
+    zero: { A: [[0, 1, 2], [1, 1, 1], [2, 1, 3]], bs: [["(0, 2, 1)", [0, 2, 1]]], pivot: true },
+    tiny: { A: [[1e-17, 4], [3, 1]], bs: [["(9, 7)", [9, 7]]], pivot: false },
+  };
+  const sub = i => String(i + 1).split("").map(c => "₀₁₂₃₄₅₆₇₈₉"[+c]).join("");
+  const f = v => fmtFrac(v);
+  let A, bs, fsteps, final, flopsF = 0, solveFlops = 0, solves = 0, sHistory = 0;
+  const rng = mulberry32(572);
+
+  /* ---------------- factorization steps ---------------- */
+  function buildFactorSteps(A0, pivot, predict) {
+    const n = A0.length, U = LA.clone(A0), L = LA.eye(n), known = LA.eye(n).map(r => r.map(Boolean)), perm = [...Array(n).keys()];
+    const steps = []; let flops = 0;
+    const snap = (hl, narr) => steps.push({ U: LA.clone(U), L: LA.clone(L), known: known.map(r => r.slice()), perm: perm.slice(), hl, narr, flops });
+    snap({}, `Start with <i>A</i>. <i>L</i> begins as the identity; its empty slots below the diagonal will fill with multipliers.${pivot ? " <i>P</i> records row swaps." : ""}`);
+    for (let k = 0; k < n - 1; k++) {
+      if (pivot) {
+        let p = k; for (let i = k + 1; i < n; i++) if (Math.abs(U[i][k]) > Math.abs(U[p][k])) p = i;
+        snap({ scan: k }, `<strong>Column ${k + 1}: choose the pivot.</strong> Scan from the diagonal down for the entry largest in absolute value: ${Array.from({ length: n - k }, (_, t) => `|${f(U[k + t][k])}|`).join(", ")}. Largest is in row ${p + 1}.`);
+        if (p !== k) {
+          [U[k], U[p]] = [U[p], U[k]]; [perm[k], perm[p]] = [perm[p], perm[k]];
+          for (let j = 0; j < k; j++) { [L[k][j], L[p][j]] = [L[p][j], L[k][j]]; }
+          snap({ swap: [k, p] }, `<strong>Swap rows ${k + 1} and ${p + 1}</strong> in the working matrix, in <i>P</i>, and in the multipliers already stored in <i>L</i>. No arithmetic, just bookkeeping.`);
+        }
+      }
+      if (U[k][k] === 0) {
+        snap({ pivot: [k, k] }, `<strong>The pivot is exactly 0.</strong> The next multiplier would be ${f(U[k + 1][k])}/0, which is undefined, so elimination stops here. Turn on <em>partial pivoting</em> and step through again.`);
+        return { steps, broken: true };
+      }
+      for (let i = k + 1; i < n; i++) {
+        const m = U[i][k] / U[k][k];
+        if (predict) snap({ pivot: [k, k], src: k, row: i, target: [i, k] },
+          `<span class="predict"><strong>Predict:</strong> what multiplier <i>m</i><sub>${i + 1}${k + 1}</sub> zeroes the highlighted entry ${f(U[i][k])}, and what will row ${i + 1} become? Work it out, then press Next.</span>`);
+        const before = U[i].slice();
+        for (let j = k + 1; j < n; j++) U[i][j] -= m * U[k][j];
+        U[i][k] = 0; L[i][k] = m; known[i][k] = true;
+        flops += 1 + 2 * (n - k - 1);
+        snap({ pivot: [k, k], src: k, row: i, newL: [i, k] },
+          `<strong><i>m</i><sub>${i + 1}${k + 1}</sub> = ${f(before[k])} / ${f(U[k][k])} = ${f(m)}.</strong> Row ${i + 1} &larr; row ${i + 1} &minus; ${f(m)}&middot;row ${k + 1}: (${before.map(f).join(", ")}) becomes (${U[i].map(f).join(", ")}). The multiplier goes into <i>L</i> at position (${i + 1}, ${k + 1}), the same spot it just zeroed.`);
+      }
+    }
+    if (U[n - 1][n - 1] === 0) { snap({ pivot: [n - 1, n - 1] }, `<strong>The last pivot is 0:</strong> <i>A</i> is singular, so no factorization can give a unique solution.`); return { steps, broken: true }; }
+    const Pm = perm.map(r => A0[r]), LUp = LA.mul(L, U);
+    const err = Math.max(...Pm.flatMap((r, i) => r.map((v, j) => Math.abs(v - LUp[i][j]))));
+    snap({ done: true }, `<strong>Done.</strong> <i>U</i> is upper triangular and <i>L</i> holds every multiplier. Multiply back: <i>L</i><i>U</i> ${pivot ? "= <i>PA</i>" : "= <i>A</i>"} (largest entry difference ${err === 0 ? "exactly 0" : fmt(err, 2)}). Total cost: <strong>${flops} flops</strong>.`);
+    return { steps, broken: false, L, U, perm, flops };
+  }
+
+  function renderFactor(i) {
+    const s = fsteps.steps[i], n = s.U.length, hl = s.hl, box = $("#fmats"); box.innerHTML = "";
+    const Pm = s.perm.map(r => LA.eye(n)[r]);
+    if ($("#pivot").checked) box.append(matTable(Pm, { label: "Permutation P", cap: "<i>P</i>", cls: (a) => hl.swap && hl.swap.includes(a) ? "hlrow" : "" }));
+    box.append(matTable(s.L, { label: "L", cap: "<i>L</i>", fmtf: (v, a, b) => s.known[a][b] || a < b ? f(v) : "·",
+      cls: (a, b) => hl.newL && hl.newL[0] === a && hl.newL[1] === b ? "newL" : (!s.known[a][b] && a > b ? "dim" : (hl.swap && hl.swap.includes(a) && b < hl.swap[0] ? "hlrow" : "")) }));
+    box.append(matTable(s.U, { label: "Working matrix, becoming U", cap: hl.done ? "<i>U</i>" : "working matrix &rarr; <i>U</i>",
+      cls: (a, b) => {
+        if (hl.pivot && hl.pivot[0] === a && hl.pivot[1] === b) return "pivot";
+        if (hl.scan != null && b === hl.scan && a >= hl.scan) return "src";
+        if (hl.swap && hl.swap.includes(a)) return "hlrow";
+        if (hl.target && hl.target[0] === a && hl.target[1] === b) return "newL";
+        if (hl.row === a) return "hlrow";
+        if (hl.src === a) return "src";
+        if (a > b && s.U[a][b] === 0) return "zeroed";
+        return "";
+      } }));
+    $("#fnarr").innerHTML = s.narr + `<div class="stepcount" style="margin-top:.35rem">Flops so far: ${s.flops}</div>`;
+  }
+
+  /* ---------------- solve steps ---------------- */
+  function buildSolveSteps(b) {
+    const { L, U, perm } = fsteps, n = b.length, pb = perm.map(r => b[r]);
+    const y = new Array(n).fill(null), x = new Array(n).fill(null), steps = [];
+    let flops = 0;
+    const snap = (hl, narr) => steps.push({ y: y.slice(), x: x.slice(), hl, narr, flops });
+    const permuted = perm.some((r, i) => r !== i);
+    snap({ phase: "start" }, permuted ? `Apply the same row swaps to <i>b</i>: <i>Pb</i> = (${pb.map(f).join(", ")}).` : `<i>P</i> = <i>I</i> here (no swaps), so <i>Pb</i> = <i>b</i> = (${b.map(f).join(", ")}).`);
+    for (let i = 0; i < n; i++) {
+      let s = pb[i]; const terms = [];
+      for (let j = 0; j < i; j++) { s -= L[i][j] * y[j]; terms.push(`${f(L[i][j])}&middot;(${f(y[j])})`); }
+      y[i] = s; flops += 2 * i;
+      snap({ phase: "fwd", i }, `<strong>Forward, row ${i + 1}:</strong> <i>y</i><sub>${i + 1}</sub> = ${f(pb[i])}${terms.length ? " &minus; " + terms.join(" &minus; ") : ""} = <strong>${f(y[i])}</strong>.`);
+    }
+    for (let i = n - 1; i >= 0; i--) {
+      let s = y[i]; const terms = [];
+      for (let j = i + 1; j < n; j++) { s -= U[i][j] * x[j]; terms.push(`${f(U[i][j])}&middot;(${f(x[j])})`); }
+      x[i] = s / U[i][i]; flops += 2 * (n - 1 - i) + 1;
+      snap({ phase: "back", i }, `<strong>Back, row ${i + 1}:</strong> <i>x</i><sub>${i + 1}</sub> = (${f(y[i])}${terms.length ? " &minus; " + terms.join(" &minus; ") : ""}) / ${f(U[i][i])} = <strong>${f(x[i])}</strong>.`);
+    }
+    const r = LA.sub(LA.mv(A, x), b), rn = LA.normInf(r);
+    snap({ phase: "done" }, `<strong>Solved:</strong> <i>x</i> = (${x.map(f).join(", ")}) in ${flops} flops, no elimination needed. Check: largest entry of <i>Ax</i> &minus; <i>b</i> is ${rn === 0 ? "exactly 0" : fmt(rn, 2)}.${n === 2 && Math.abs(A[0][0]) < 1e-10 && !$("#pivot").checked ? ' <span class="bad">The true solution is about (1.5833, 2.25): the first entry is badly wrong. Turn on partial pivoting and refactor.</span>' : ""}`);
+    return { steps, flops };
+  }
+
+  let sData, sStep, sCounted = false;
+  function renderSolve(i) {
+    if (!sData) return;
+    const s = sData.steps[i], n = s.y.length, box = $("#smats"); box.innerHTML = "";
+    const { L, U } = fsteps, hl = s.hl;
+    box.append(matTable(L, { label: "L", cap: "<i>L</i>", cls: (a, b) => hl.phase === "fwd" && a === hl.i ? (b < a ? "src" : "pivot") : "" }));
+    box.append(matTable(colVec(s.y), { label: "y", cap: "<i>y</i>", fmtf: v => v == null ? "?" : f(v), cls: a => hl.phase === "fwd" && a === hl.i ? "newL" : (s.y[a] == null ? "dim" : "") }));
+    box.append(el("span", { class: "op", "aria-hidden": "true" }, "then"));
+    box.append(matTable(U, { label: "U", cap: "<i>U</i>", cls: (a, b) => hl.phase === "back" && a === hl.i ? (b > a ? "src" : "pivot") : "" }));
+    box.append(matTable(colVec(s.x), { label: "x", cap: "<i>x</i>", fmtf: v => v == null ? "?" : f(v), cls: a => hl.phase === "back" && a === hl.i ? "newL" : (s.x[a] == null ? "dim" : "") }));
+    $("#snarr").innerHTML = s.narr;
+    if (i === sData.steps.length - 1 && !sCounted) { sCounted = true; solves++; solveFlops = sData.flops; renderTally(); }
+  }
+
+  function renderTally() {
+    const F = fsteps.flops || 0, S = solveFlops, r = solves;
+    $("#tally").innerHTML = fsteps.broken ? "<dt>Status</dt><dd>Factorization did not finish; turn on pivoting.</dd>" :
+      `<dt>Factorization (paid once)</dt><dd>${F} flops</dd>
+       <dt>Each solve (two triangular passes)</dt><dd>${S || "—"} flops</dd>
+       <dt>Systems solved</dt><dd>${r}</dd>
+       <dt>Total, reusing <i>L</i>, <i>U</i></dt><dd><strong>${F + r * S}</strong> flops</dd>
+       <dt>Total, re-eliminating every time</dt><dd>${r * (F + S)} flops</dd>`;
+  }
+
+  /* ---------------- wiring ---------------- */
+  const fStepper = new Stepper($("#fctl"), { total: 1, onRender: renderFactor });
+  const sStepper = new Stepper($("#sctl"), { total: 1, onRender: i => renderSolve(i) });
+
+  function refactor() {
+    fsteps = buildFactorSteps(A, $("#pivot").checked, $("#predict").checked);
+    const fin = fsteps.steps[fsteps.steps.length - 1];
+    fStepper.setTotal(fsteps.steps.length); fStepper.go(0);
+    solves = 0; solveFlops = 0; renderTally();
+    const sel = $("#bsel"); sel.innerHTML = ""; bs.forEach(([lab], i) => sel.append(el("option", { value: i }, lab)));
+    newSolve();
+  }
+  function newSolve() {
+    if (fsteps.broken) { sData = null; sStepper.setTotal(1); $("#smats").innerHTML = ""; $("#snarr").innerHTML = "The factorization in Part 1 broke down, so there are no factors to solve with yet. Turn on partial pivoting."; return; }
+    sData = buildSolveSteps(bs[+$("#bsel").value][1]); sCounted = false;
+    sStepper.setTotal(sData.steps.length); sStepper.go(0);
+  }
+  function load(key) {
+    $("#customBox").hidden = key !== "custom";
+    if (key === "custom") return;
+    const p = PRESETS[key]; A = LA.clone(p.A); bs = p.bs.map(x => [x[0], x[1].slice()]); $("#pivot").checked = p.pivot; refactor();
+  }
+  $("#preset").addEventListener("change", e => load(e.target.value));
+  $("#pivot").addEventListener("change", refactor);
+  $("#predict").addEventListener("change", refactor);
+  $("#bsel").addEventListener("change", newSolve);
+  $("#bnew").addEventListener("click", () => {
+    const n = A.length, b = Array.from({ length: n }, () => Math.round(rng() * 20 - 10));
+    bs.push([`random: (${b.join(", ")})`, b]); $("#bsel").append(el("option", { value: bs.length - 1 }, bs[bs.length - 1][0]));
+    $("#bsel").value = bs.length - 1; newSolve();
+  });
+  $("#customGo").addEventListener("click", () => {
+    const rows = $("#customA").value.trim().split(";").map(r => r.trim().split(/[\s,]+/).map(Number));
+    const n = rows.length;
+    if (n < 2 || n > 6 || rows.some(r => r.length !== n || r.some(v => !isFinite(v)))) { $("#customErr").textContent = "Enter a square matrix, 2×2 up to 6×6, numbers only."; return; }
+    $("#customErr").textContent = ""; A = rows; bs = [["b = A·(1, 1, …, 1)", LA.mv(rows, rows.map(() => 1))]]; refactor();
+  });
+  load("notes");
+})();
+</script>
+
+</main>
+<footer class="site">Interactive companion to the course notes. Every number on this page is computed live in your browser in IEEE double precision &mdash; the same arithmetic NumPy uses.</footer>
+</div>
+</body>
+</html>

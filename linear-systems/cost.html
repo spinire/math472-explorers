@@ -1,0 +1,575 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>What LU Costs</title>
+<meta name="description" content="Where the two-thirds n-cubed comes from, how to predict run times, and three reasons not to compute the inverse.">
+<style>
+:root {
+  color-scheme: light;
+  --bg: #fcfcfb;
+  --surface: #f3f2ef;
+  --ink: #111110;
+  --ink-2: #4a4946;
+  --ink-3: #6b6a66;
+  --rule: #d9d7d1;
+  --accent: #1f64b8;
+  --s1: #2a78d6;      /* blue: active row / series 1 */
+  --s2: #c9501f;      /* orange: pivot / series 2 */
+  --s3: #13875e;      /* aqua-green: L entries / series 3 */
+  --t1: #dbe8f8;      /* tints for cell highlights */
+  --t2: #fbe1d4;
+  --t3: #d5efe3;
+  --t4: #f5ecc8;
+  --focus: #1f64b8;
+  --maxw: 60rem;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #1a1a19;
+    --surface: #242422;
+    --ink: #f4f3ef;
+    --ink-2: #c3c2b7;
+    --ink-3: #a3a29a;
+    --rule: #3d3c39;
+    --accent: #7fb2f0;
+    --s1: #5a9cec;
+    --s2: #f08a5d;
+    --s3: #3cc392;
+    --t1: #1e3450;
+    --t2: #4a2a1b;
+    --t3: #173d2f;
+    --t4: #423a17;
+    --focus: #7fb2f0;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #1a1a19; --surface: #242422; --ink: #f4f3ef; --ink-2: #c3c2b7; --ink-3: #a3a29a;
+  --rule: #3d3c39; --accent: #7fb2f0; --s1: #5a9cec; --s2: #f08a5d; --s3: #3cc392;
+  --t1: #1e3450; --t2: #4a2a1b; --t3: #173d2f; --t4: #423a17; --focus: #7fb2f0;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html { background: var(--bg); }
+body {
+  margin: 0; background: var(--bg); color: var(--ink);
+  font: 17px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+.wrap { max-width: var(--maxw); margin: 0 auto; padding: 1.5rem 16px 4rem; }
+header.site { border-bottom: 1px solid var(--rule); margin-bottom: 2rem; padding-bottom: 1rem; }
+header.site .crumb { font-size: .9rem; color: var(--ink-3); margin: 0 0 .25rem; }
+header.site .crumb a { color: var(--ink-3); }
+h1 { font-size: 1.9rem; line-height: 1.2; margin: 0 0 .5rem; letter-spacing: -.01em; }
+h2 { font-size: 1.35rem; margin: 3rem 0 .5rem; line-height: 1.3; }
+h3 { font-size: 1.1rem; margin: 1.75rem 0 .4rem; }
+p { margin: .6rem 0; }
+.lede { font-size: 1.08rem; color: var(--ink-2); max-width: 44rem; }
+.muted { color: var(--ink-3); }
+a { color: var(--accent); }
+:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; border-radius: 3px; }
+.skip { position: absolute; left: -9999px; }
+.skip:focus { left: 1rem; top: 1rem; background: var(--bg); padding: .5rem; z-index: 10; }
+.panel { background: var(--surface); border-radius: 10px; padding: 1rem 1.1rem; margin: 1rem 0; overflow-x: auto; }
+.row { display: flex; flex-wrap: wrap; gap: 1.25rem; align-items: flex-start; }
+.col { flex: 1 1 18rem; min-width: 0; }
+.controls { display: flex; flex-wrap: wrap; gap: .5rem .75rem; align-items: center; margin: .75rem 0; }
+button, select, input[type=number], input[type=text] {
+  font: inherit; font-size: .95rem; color: var(--ink); background: var(--bg);
+  border: 1px solid var(--rule); border-radius: 7px; padding: .35rem .75rem; min-height: 2.25rem;
+}
+button { cursor: pointer; }
+button:hover:not(:disabled) { border-color: var(--ink-3); }
+button:disabled { opacity: .45; cursor: default; }
+button.primary { background: var(--accent); color: var(--bg); border-color: var(--accent); }
+input[type=number] { width: 5.5rem; }
+input[type=range] { accent-color: var(--accent); width: min(18rem, 100%); }
+label { font-size: .95rem; }
+.narr {
+  min-height: 4.5rem; border-left: 3px solid var(--accent); padding: .35rem .9rem; margin: .75rem 0;
+  background: var(--bg); border-radius: 0 6px 6px 0;
+}
+.narr strong { color: var(--ink); }
+.stepcount { font-size: .88rem; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.readout { font-variant-numeric: tabular-nums; }
+.readout dt { color: var(--ink-3); font-size: .88rem; }
+.readout dd { margin: 0 0 .5rem; font-size: 1.05rem; }
+.kv { display: grid; grid-template-columns: minmax(7rem, 48%) minmax(0, 1fr); gap: .15rem 1rem; font-variant-numeric: tabular-nums; }
+.kv > :nth-child(odd) { color: var(--ink-3); }
+.mono, code { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: .92em; }
+.math { font-family: "Cambria Math", "STIX Two Math", "Latin Modern Math", Georgia, serif; font-style: normal; }
+.math i, i.v { font-style: italic; }
+/* matrices */
+.mats { display: flex; flex-wrap: wrap; gap: 1rem 1.5rem; align-items: center; margin: .75rem 0; }
+.matwrap { display: inline-flex; flex-direction: column; align-items: center; gap: .2rem; }
+.matwrap .cap { font-size: .9rem; color: var(--ink-3); }
+table.mat { border-collapse: separate; border-spacing: 2px; position: relative; padding: 0 6px;
+  font-variant-numeric: tabular-nums; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: .92rem; }
+table.mat::before, table.mat::after { content: ""; position: absolute; top: 0; bottom: 0; width: 6px;
+  border: 1.5px solid var(--ink-2); }
+table.mat::before { left: 0; border-right: none; }
+table.mat::after { right: 0; border-left: none; }
+table.mat td { padding: .2rem .5rem; text-align: right; min-width: 3.2rem; border-radius: 4px;
+  transition: background-color .25s; }
+table.mat td.pivot { background: var(--t2); outline: 2px solid var(--s2); }
+table.mat td.hlrow { background: var(--t1); }
+table.mat td.src { background: var(--t4); }
+table.mat td.newL { background: var(--t3); outline: 2px solid var(--s3); }
+table.mat td.zeroed { color: var(--ink-3); }
+table.mat td.dim { color: var(--ink-3); opacity: .55; }
+table.mat td.done { background: var(--t3); }
+.op { font-size: 1.3rem; color: var(--ink-3); }
+/* legend chips */
+.legend { display: flex; flex-wrap: wrap; gap: .4rem 1rem; font-size: .88rem; color: var(--ink-2); margin: .25rem 0; }
+.chip { display: inline-block; width: .9rem; height: .9rem; border-radius: 3px; vertical-align: -2px; margin-right: .3rem; }
+/* svg */
+svg.plot { width: 100%; height: auto; display: block; overflow: visible; }
+svg.plot text { fill: var(--ink-2); font: 12px system-ui, sans-serif; }
+svg.plot .axis { stroke: var(--ink-3); stroke-width: 1; }
+svg.plot .grid { stroke: var(--rule); stroke-width: 1; }
+.fig { margin: .75rem 0; }
+.figcap { font-size: .9rem; color: var(--ink-3); margin-top: .35rem; }
+details { margin: .75rem 0; }
+summary { cursor: pointer; color: var(--accent); }
+.predict { background: var(--t4); border-radius: 8px; padding: .5rem .8rem; margin: .5rem 0; }
+.good { color: var(--s3); font-weight: 600; }
+.bad { color: var(--s2); font-weight: 600; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+nav.toc { font-size: .95rem; }
+nav.toc ol { padding-left: 1.2rem; margin: .25rem 0; }
+footer.site { margin-top: 4rem; padding-top: 1rem; border-top: 1px solid var(--rule); font-size: .88rem; color: var(--ink-3); }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+@media (max-width: 560px) { body { font-size: 16px; } h1 { font-size: 1.55rem; } table.mat td { min-width: 2.4rem; padding: .15rem .3rem; } }
+
+</style>
+<script>
+/* ---------- shared helpers: numerics, formatting, DOM, SVG, stepper ---------- */
+"use strict";
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
+const el = (tag, attrs = {}, ...kids) => {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (k === "class") e.className = v; else if (k === "html") e.innerHTML = v;
+    else if (k.startsWith("on")) e.addEventListener(k.slice(2), v); else e.setAttribute(k, v);
+  }
+  for (const k of kids) if (k != null) e.append(k.nodeType ? k : document.createTextNode(k));
+  return e;
+};
+const SVGNS = "http://www.w3.org/2000/svg";
+const sv = (tag, attrs = {}, parent) => {
+  const e = document.createElementNS(SVGNS, tag);
+  for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
+  if (parent) parent.appendChild(e);
+  return e;
+};
+const cssVar = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+
+/* number formatting */
+function fmt(x, d = 4) {
+  if (!isFinite(x)) return x > 0 ? "∞" : (x < 0 ? "−∞" : "NaN");
+  if (x === 0) return "0";
+  const a = Math.abs(x);
+  let s;
+  if (a >= 1e5 || a < 1e-3) s = fmtExp(x, d);
+  else { s = (+x.toFixed(d)).toString(); }
+  return s.replace("-", "−");
+}
+function fmtExp(x, d = 3) {
+  if (x === 0) return "0";
+  const e = Math.floor(Math.log10(Math.abs(x)));
+  let m = x / Math.pow(10, e);
+  if (Math.abs(+m.toFixed(d - 1)) >= 10) { m /= 10; return fmtExp(x, d); }
+  return (+m.toFixed(d - 1)).toString().replace("-", "−") + "×10" + sup(e);
+}
+function sup(n) {
+  const m = { "-": "⁻", "0": "⁰", "1": "¹", "2": "²", "3": "³", "4": "⁴", "5": "⁵", "6": "⁶", "7": "⁷", "8": "⁸", "9": "⁹" };
+  return String(n).split("").map(c => m[c] || c).join("");
+}
+function fmtFrac(x) { // nice display for values that are near simple fractions/integers
+  if (Math.abs(x - Math.round(x)) < 1e-12) return String(Math.round(x)).replace("-", "−");
+  return fmt(x, 4);
+}
+
+/* ---------- linear algebra (dense, arrays of arrays) ---------- */
+const LA = {
+  clone: A => A.map(r => r.slice()),
+  eye: n => Array.from({ length: n }, (_, i) => Array.from({ length: n }, (_, j) => +(i === j))),
+  zeros: (m, n) => Array.from({ length: m }, () => new Array(n).fill(0)),
+  T: A => A[0].map((_, j) => A.map(r => r[j])),
+  mul(A, B) {
+    const m = A.length, k = B.length, n = B[0].length, C = LA.zeros(m, n);
+    for (let i = 0; i < m; i++) for (let p = 0; p < k; p++) { const a = A[i][p]; if (a) for (let j = 0; j < n; j++) C[i][j] += a * B[p][j]; }
+    return C;
+  },
+  mv: (A, x) => A.map(r => r.reduce((s, a, j) => s + a * x[j], 0)),
+  dot: (x, y) => x.reduce((s, a, i) => s + a * y[i], 0),
+  norm2: x => Math.hypot(...x),
+  norm1: x => x.reduce((s, a) => s + Math.abs(a), 0),
+  normInf: x => Math.max(...x.map(Math.abs)),
+  sub: (x, y) => x.map((a, i) => a - y[i]),
+  matNorm1: A => Math.max(...A[0].map((_, j) => A.reduce((s, r) => s + Math.abs(r[j]), 0))),
+  matNormInf: A => Math.max(...A.map(r => r.reduce((s, a) => s + Math.abs(a), 0))),
+  /* LU with optional partial pivoting; returns {L,U,perm,swaps} */
+  lu(A0, pivot = true) {
+    const n = A0.length, U = LA.clone(A0), L = LA.eye(n), perm = [...Array(n).keys()];
+    for (let k = 0; k < n - 1; k++) {
+      if (pivot) {
+        let p = k; for (let i = k + 1; i < n; i++) if (Math.abs(U[i][k]) > Math.abs(U[p][k])) p = i;
+        if (p !== k) { [U[k], U[p]] = [U[p], U[k]]; [perm[k], perm[p]] = [perm[p], perm[k]];
+          for (let j = 0; j < k; j++) [L[k][j], L[p][j]] = [L[p][j], L[k][j]]; }
+      }
+      for (let i = k + 1; i < n; i++) {
+        const m = U[i][k] / U[k][k]; L[i][k] = m;
+        for (let j = k; j < n; j++) U[i][j] -= m * U[k][j];
+        U[i][k] = 0;
+      }
+    }
+    return { L, U, perm };
+  },
+  fwd(L, b) { const n = b.length, y = new Array(n); for (let i = 0; i < n; i++) { let s = b[i]; for (let j = 0; j < i; j++) s -= L[i][j] * y[j]; y[i] = s / L[i][i]; } return y; },
+  back(U, y) { const n = y.length, x = new Array(n); for (let i = n - 1; i >= 0; i--) { let s = y[i]; for (let j = i + 1; j < n; j++) s -= U[i][j] * x[j]; x[i] = s / U[i][i]; } return x; },
+  solve(A, b, pivot = true) { const { L, U, perm } = LA.lu(A, pivot); return LA.back(U, LA.fwd(L, perm.map(i => b[i]))); },
+  /* Gauss–Jordan inverse with partial pivoting (the usual textbook inverse) */
+  inv(A0) {
+    const n = A0.length, M = A0.map((r, i) => [...r, ...LA.eye(n)[i]]);
+    for (let k = 0; k < n; k++) {
+      let p = k; for (let i = k + 1; i < n; i++) if (Math.abs(M[i][k]) > Math.abs(M[p][k])) p = i;
+      [M[k], M[p]] = [M[p], M[k]];
+      const d = M[k][k]; for (let j = 0; j < 2 * n; j++) M[k][j] /= d;
+      for (let i = 0; i < n; i++) if (i !== k) { const m = M[i][k]; if (m) for (let j = 0; j < 2 * n; j++) M[i][j] -= m * M[k][j]; }
+    }
+    return M.map(r => r.slice(n));
+  },
+  /* Cholesky solve (for normal equations) */
+  cholSolve(A, b) {
+    const n = A.length, L = LA.zeros(n, n);
+    for (let j = 0; j < n; j++) {
+      let s = A[j][j]; for (let k = 0; k < j; k++) s -= L[j][k] * L[j][k];
+      if (!(s > 0)) return null;
+      L[j][j] = Math.sqrt(s);
+      for (let i = j + 1; i < n; i++) { let t = A[i][j]; for (let k = 0; k < j; k++) t -= L[i][k] * L[j][k]; L[i][j] = t / L[j][j]; }
+    }
+    const y = LA.fwd(L, b); return LA.back(LA.T(L), y);
+  },
+  /* Householder QR least squares: returns x minimising ||Ax-b|| */
+  qrSolve(A0, b0) {
+    const m = A0.length, n = A0[0].length, A = LA.clone(A0), b = b0.slice();
+    for (let k = 0; k < n; k++) {
+      let nr = 0; for (let i = k; i < m; i++) nr += A[i][k] * A[i][k]; nr = Math.sqrt(nr);
+      if (nr === 0) continue;
+      const alpha = A[k][k] > 0 ? -nr : nr, v = new Array(m).fill(0);
+      v[k] = A[k][k] - alpha; for (let i = k + 1; i < m; i++) v[i] = A[i][k];
+      let vv = 0; for (let i = k; i < m; i++) vv += v[i] * v[i];
+      if (vv === 0) continue;
+      for (let j = k; j < n; j++) { let s = 0; for (let i = k; i < m; i++) s += v[i] * A[i][j]; s = 2 * s / vv; for (let i = k; i < m; i++) A[i][j] -= s * v[i]; }
+      let s = 0; for (let i = k; i < m; i++) s += v[i] * b[i]; s = 2 * s / vv; for (let i = k; i < m; i++) b[i] -= s * v[i];
+    }
+    const R = A.slice(0, n).map(r => r.slice(0, n));
+    return LA.back(R, b.slice(0, n));
+  },
+  /* singular values via one-sided Jacobi (accurate for small dense matrices) */
+  svals(A0) {
+    const m = A0.length, n = A0[0].length;
+    let U = A0.map(r => r.slice());
+    if (m < n) U = LA.T(U);
+    const cols = U[0].length, rows = U.length;
+    for (let sweep = 0; sweep < 60; sweep++) {
+      let off = 0;
+      for (let p = 0; p < cols - 1; p++) for (let q = p + 1; q < cols; q++) {
+        let a = 0, b = 0, c = 0;
+        for (let i = 0; i < rows; i++) { a += U[i][p] * U[i][p]; b += U[i][q] * U[i][q]; c += U[i][p] * U[i][q]; }
+        if (Math.abs(c) <= 1e-15 * Math.sqrt(a * b)) continue;
+        off = Math.max(off, Math.abs(c) / Math.sqrt(a * b));
+        const z = (b - a) / (2 * c), t = Math.sign(z || 1) / (Math.abs(z) + Math.sqrt(1 + z * z));
+        const cs = 1 / Math.sqrt(1 + t * t), sn = cs * t;
+        for (let i = 0; i < rows; i++) { const up = U[i][p], uq = U[i][q]; U[i][p] = cs * up - sn * uq; U[i][q] = sn * up + cs * uq; }
+      }
+      if (off < 1e-15) break;
+    }
+    const s = []; for (let j = 0; j < cols; j++) { let t = 0; for (let i = 0; i < rows; i++) t += U[i][j] * U[i][j]; s.push(Math.sqrt(t)); }
+    return s.sort((a, b) => b - a);
+  },
+  cond2(A) { const s = LA.svals(A); return s[0] / s[s.length - 1]; },
+};
+
+/* seeded PRNG so every student sees the same "random" numbers */
+function mulberry32(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+
+/* ---------- matrix rendering ---------- */
+/* cls(i,j) -> class name; fmtf(v,i,j) -> string */
+function matTable(M, { label = "matrix", cls = () => "", fmtf = v => fmtFrac(v), cap = null } = {}) {
+  const t = el("table", { class: "mat", "aria-label": `${label}, ${M.length} by ${M[0].length}` });
+  const tb = el("tbody"); t.append(tb);
+  M.forEach((r, i) => { const tr = el("tr"); r.forEach((v, j) => { const c = cls(i, j); tr.append(el("td", c ? { class: c } : {}, fmtf(v, i, j))); }); tb.append(tr); });
+  const w = el("div", { class: "matwrap" }, t);
+  if (cap) w.append(el("div", { class: "cap", html: cap }));
+  return w;
+}
+const colVec = x => x.map(v => [v]);
+
+/* ---------- linear scale + axes ---------- */
+function scale(d0, d1, r0, r1, log = false) {
+  if (log) { const a = Math.log10(d0), b = Math.log10(d1); const f = v => r0 + (Math.log10(v) - a) / (b - a) * (r1 - r0); f.inv = p => Math.pow(10, a + (p - r0) / (r1 - r0) * (b - a)); return f; }
+  const f = v => r0 + (v - d0) / (d1 - d0) * (r1 - r0); f.inv = p => d0 + (p - r0) / (r1 - r0) * (d1 - d0); return f;
+}
+function niceTicks(a, b, n = 6) {
+  const span = b - a, step0 = span / n, mag = Math.pow(10, Math.floor(Math.log10(step0)));
+  const step = [1, 2, 2.5, 5, 10].map(s => s * mag).find(s => span / s <= n) || 10 * mag;
+  const out = []; for (let v = Math.ceil(a / step) * step; v <= b + 1e-9 * step; v += step) out.push(+v.toFixed(10));
+  return out;
+}
+/* axes(svg, X, Y, {xt, yt, xlab, ylab, W, H, pad, log flags}) */
+function drawAxes(g, X, Y, o) {
+  const { x0, x1, y0, y1 } = o;
+  const xt = o.xt || niceTicks(o.xd[0], o.xd[1]), yt = o.yt || niceTicks(o.yd[0], o.yd[1]);
+  for (const t of yt) { sv("line", { x1: x0, x2: x1, y1: Y(t), y2: Y(t), class: "grid" }, g);
+    sv("text", { x: x0 - 6, y: Y(t) + 4, "text-anchor": "end" }, g).textContent = o.yfmt ? o.yfmt(t) : fmt(t, 3); }
+  for (const t of xt) { sv("line", { x1: X(t), x2: X(t), y1: y0, y2: y0 + 4, class: "axis" }, g);
+    sv("text", { x: X(t), y: y0 + 17, "text-anchor": "middle" }, g).textContent = o.xfmt ? o.xfmt(t) : fmt(t, 3); }
+  sv("line", { x1: x0, x2: x1, y1: y0, y2: y0, class: "axis" }, g);
+  sv("line", { x1: x0, x2: x0, y1: y0, y2: y1, class: "axis" }, g);
+  if (o.xlab) sv("text", { x: (x0 + x1) / 2, y: y0 + 36, "text-anchor": "middle" }, g).textContent = o.xlab;
+  if (o.ylab) { const t = sv("text", { x: 0, y: 0, "text-anchor": "middle", transform: `translate(${x0 - 46},${(y0 + y1) / 2}) rotate(-90)` }, g); t.textContent = o.ylab; }
+}
+
+/* ---------- stepper: prev / next / reset with aria-live narration ---------- */
+class Stepper {
+  constructor(root, { onRender, total, labels = {} }) {
+    this.i = 0; this.onRender = onRender; this.total = total;
+    this.prev = el("button", { type: "button", onclick: () => this.go(this.i - 1) }, labels.prev || "◀ Back");
+    this.next = el("button", { type: "button", class: "primary", onclick: () => this.go(this.i + 1) }, labels.next || "Next ▶");
+    this.reset = el("button", { type: "button", onclick: () => this.go(0) }, "Start over");
+    this.count = el("span", { class: "stepcount", "aria-hidden": "true" });
+    root.append(this.prev, this.next, this.reset, this.count);
+  }
+  setTotal(n) { this.total = n; this.go(Math.min(this.i, n - 1)); }
+  go(i) {
+    this.i = Math.max(0, Math.min(this.total - 1, i));
+    this.prev.disabled = this.i === 0; this.next.disabled = this.i === this.total - 1;
+    this.count.textContent = `Step ${this.i + 1} of ${this.total}`;
+    this.onRender(this.i);
+  }
+}
+
+/* announce helper for sliders etc. (debounced) */
+function makeAnnouncer(node) { let t; return msg => { clearTimeout(t); t = setTimeout(() => { node.textContent = msg; }, 350); }; }
+
+</script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<div class="wrap">
+<header class="site"><p class="crumb"><a href="index.html">Solving Linear Systems &mdash; explorers</a></p><p class="crumb">MATH/CCM 472/572 &middot; Solving Linear Systems</p></header>
+<main id="main">
+<!-- title: What LU Costs -->
+<!-- desc: Where the two-thirds n-cubed comes from, how to predict run times, and three reasons not to compute the inverse. -->
+<h1>What <i>LU</i> costs, and why not the inverse</h1>
+<p class="lede">Factoring an <i>n</i>&times;<i>n</i> matrix costs about &frac23;<i>n</i>&sup3; flops; each triangular solve after that costs about <i>n</i>&sup2;. This page shows where those numbers come from, what they mean in seconds, and why computing <i>A</i><sup>&minus;1</sup> loses on cost, accuracy <em>and</em> memory.</p>
+
+<nav class="toc panel" aria-label="On this page"><ol>
+  <li><a href="#where">Where &frac23;<i>n</i>&sup3; comes from</a></li>
+  <li><a href="#seconds">From flops to seconds</a></li>
+  <li><a href="#inverse">Why not compute <i>A</i><sup>&minus;1</sup>?</a>
+    <ol><li><a href="#scalar">A one-number version</a></li><li><a href="#race">Accuracy</a></li><li><a href="#sparse">Memory: the heated rod</a></li></ol></li>
+</ol></nav>
+
+<h2 id="where">Where &frac23;<i>n</i>&sup3; comes from</h2>
+<p>At step <i>k</i>, elimination updates every entry of the block below and to the right of the pivot: an (<i>n</i>&minus;<i>k</i>)&times;(<i>n</i>&minus;<i>k</i>) block, with one multiply and one subtract per entry. The block shrinks by one row and one column each step.</p>
+<div class="controls">
+  <label for="nblk">Matrix size <i>n</i> = <span id="nval">8</span></label>
+  <input type="range" id="nblk" min="3" max="14" value="8">
+</div>
+<div class="panel">
+  <div class="row">
+    <div class="col"><svg id="grid" class="plot" viewBox="0 0 300 300" role="img" aria-label="Matrix grid showing the block updated at the current elimination step"></svg></div>
+    <div class="col"><svg id="bars" class="plot" viewBox="0 0 340 300" role="img" aria-label="Bar chart of work per elimination step"></svg></div>
+  </div>
+  <div id="bnarr" class="narr" aria-live="polite"></div>
+  <div class="controls" id="bctl"></div>
+</div>
+<p>Stack the updated blocks on top of each other and they form a stepped pyramid with an <i>n</i>&times;<i>n</i> base. A pyramid holds &frac13; of its bounding box, so the blocks contain about <i>n</i>&sup3;/3 entries, and at 2 flops per entry that is <strong>&frac23;<i>n</i>&sup3;</strong>. The same idea gives the triangular solves: row <i>i</i> of forward substitution touches <i>i</i> entries, a triangle of about <i>n</i>&sup2;/2 entries, so about <strong><i>n</i>&sup2;</strong> flops per solve.</p>
+
+<h2 id="seconds">From flops to seconds</h2>
+<div class="controls">
+  <label for="nsec"><i>n</i></label>
+  <select id="nsec"><option>1000</option><option>2000</option><option selected>5000</option><option>10000</option><option>20000</option><option>100000</option></select>
+  <label for="kbs">Right-hand sides <i>k</i></label>
+  <select id="kbs"><option>1</option><option>10</option><option selected>100</option><option>1000</option></select>
+  <label for="speed">Machine speed</label>
+  <select id="speed"><option value="1e9">10&#8313; flops/s (laptop, one core)</option><option value="1e10" selected>10&sup1;&#8304; flops/s (laptop, all cores)</option><option value="1e12">10&sup1;&sup2; flops/s (GPU)</option></select>
+</div>
+<div class="panel"><table class="mat" id="sectab" style="font-family:inherit"></table></div>
+<style>#sectab{border-spacing:0}#sectab::before,#sectab::after{display:none}#sectab td,#sectab th{text-align:left;padding:.35rem .9rem .35rem 0;border-bottom:1px solid var(--rule)}#sectab th{font-weight:600;color:var(--ink-2)}#sectab td.n{text-align:right;font-variant-numeric:tabular-nums}</style>
+
+<div class="predict">
+  <p style="margin:.2rem 0"><strong>Predict:</strong> <code>scipy.linalg.lu_factor</code> takes 0.02&nbsp;s at <i>n</i> = 1000. About how long at <i>n</i> = 8000?</p>
+  <div class="controls" style="margin:.4rem 0">
+    <label for="guess">Your guess (seconds)</label><input type="number" id="guess" step="any" min="0">
+    <button type="button" id="check">Check</button>
+  </div>
+  <p id="guessOut" aria-live="polite" style="margin:.2rem 0"></p>
+</div>
+
+<h2 id="inverse">Why not compute <i>A</i><sup>&minus;1</sup>?</h2>
+<p>&ldquo;Compute <i>A</i><sup>&minus;1</sup> once, then every new <i>b</i> is just a multiply&rdquo; sounds efficient. <i>LU</i> already gives you that reuse, and the inverse loses in three separate ways.</p>
+
+<h3 id="cost-inv">1. Cost</h3>
+<p>Computing <i>A</i><sup>&minus;1</sup> costs about 2<i>n</i>&sup3; flops, three times the factorization, and multiplying <i>A</i><sup>&minus;1</sup><i>b</i> costs 2<i>n</i>&sup2;, the same as a forward-plus-back solve. So you pay triple up front and save nothing per right-hand side (see the table above).</p>
+
+<h3 id="scalar">2. A one-number version</h3>
+<p>Solve 49<i>x</i> = 49 two ways in floating point: divide directly, or form the &ldquo;inverse&rdquo; 1/49 and multiply.</p>
+<div class="panel">
+  <div class="controls">
+    <label for="sa"><i>a</i> =</label><input type="number" id="sa" value="49">
+    <label for="sb"><i>b</i> =</label><input type="number" id="sb" value="49">
+  </div>
+  <dl class="kv" aria-live="polite">
+    <dt><i>x</i> = <i>b</i> / <i>a</i></dt><dd id="sdiv" class="mono"></dd>
+    <dt><i>x</i> = (1/<i>a</i>) &times; <i>b</i></dt><dd id="sinv" class="mono"></dd>
+  </dl>
+  <p class="figcap">Division rounds once. The inverse route rounds twice: once when storing 1/<i>a</i>, again after multiplying. A matrix inverse repeats that extra rounding in every one of its <i>n</i>&sup2; entries.</p>
+</div>
+
+<h3 id="race">3. Accuracy</h3>
+<p>Take the Hilbert matrix <i>H</i><sub><i>ij</i></sub> = 1/(<i>i</i>+<i>j</i>&minus;1), a classic ill-conditioned test case, and <i>b</i> = <i>H</i>&middot;(1, &hellip;, 1). Solve with pivoted <i>LU</i>, and again with <code>inv(H) @ b</code>.</p>
+<div class="controls">
+  <label for="hn">Size <i>n</i> = <span id="hnv">8</span></label>
+  <input type="range" id="hn" min="3" max="12" value="8">
+</div>
+<div class="panel">
+  <table class="mat" id="racetab" style="font-family:inherit"></table>
+  <p class="figcap">Both answers sit about equally far from the true <i>x</i>: that error is set by cond(<i>H</i>), a property of the problem, which neither method can beat. The difference is the <strong>residual</strong> &#8214;<i>b</i> &minus; <i>Hx</i>&#8214;/&#8214;<i>b</i>&#8214;. The <i>LU</i> answer satisfies the equations to machine precision: it is the exact solution of a problem within rounding of yours. The inverse&rsquo;s answer does not, and the gap grows with cond(<i>H</i>).</p>
+</div>
+<style>#racetab{border-spacing:0}#racetab::before,#racetab::after{display:none}#racetab td,#racetab th{text-align:left;padding:.35rem .9rem .35rem 0;border-bottom:1px solid var(--rule)}#racetab th{font-weight:600;color:var(--ink-2)}#racetab td.n{text-align:right;font-variant-numeric:tabular-nums}</style>
+
+<h3 id="sparse">4. Memory: the heated rod</h3>
+<p>The steady temperature along a rod, computed at <i>n</i> grid points, satisfies &minus;<i>T</i><sub><i>i</i>&minus;1</sub> + 2<i>T</i><sub><i>i</i></sub> &minus; <i>T</i><sub><i>i</i>+1</sub> = (heat source at point <i>i</i>). Each point talks only to its two neighbours, so <i>A</i> is <em>tridiagonal</em>: almost every entry is zero. Compare what <i>LU</i> and the inverse do with those zeros.</p>
+<div class="controls">
+  <label for="rn">Grid points <i>n</i> = <span id="rnv">12</span></label>
+  <input type="range" id="rn" min="6" max="24" value="12">
+</div>
+<div class="panel">
+  <div id="heat" class="row" style="gap:1rem"></div>
+  <div class="legend"><span><span class="chip" style="background:var(--s1)"></span>nonzero entry (darker = larger)</span><span><span class="chip" style="background:var(--surface);outline:1px solid var(--rule)"></span>exact zero</span></div>
+  <p id="heatnote" aria-live="polite"></p>
+</div>
+<p><i>L</i> and <i>U</i> keep the band: storing and solving with them is proportional to <i>n</i>, not <i>n</i>&sup2; or <i>n</i>&sup3;. The inverse has <strong>no zeros at all</strong>, because heat at any point affects the temperature everywhere. At <i>n</i> = 10&#8310; grid points (modest for 2D or 3D problems), the tridiagonal <i>A</i> needs about 24&nbsp;MB, while <i>A</i><sup>&minus;1</sup> would need 8&nbsp;TB.</p>
+
+<script>
+(() => {
+  /* ---------- block animation ---------- */
+  let n = 8;
+  const grid = $("#grid"), bars = $("#bars");
+  function renderBlock(k) {
+    grid.innerHTML = ""; const c = 280 / n, o = 10;
+    for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) {
+      let fill = "var(--bg)";
+      if (k < n - 1) {
+        if (i > k && j > k) fill = "var(--t1)";
+        else if (i === k && j >= k) fill = "var(--t4)";
+        else if (j === k && i > k) fill = "var(--t3)";
+        if (i === k && j === k) fill = "var(--t2)";
+      }
+      if (i > j && j < k) fill = "var(--surface)";
+      sv("rect", { x: o + j * c + 1, y: o + i * c + 1, width: c - 2, height: c - 2, rx: 2, fill, stroke: "var(--rule)" }, grid);
+    }
+    // bars: work at each step = 2(n-k-1)^2 + (n-k-1)
+    bars.innerHTML = "";
+    const w = (m) => 2 * (n - m - 1) ** 2 + (n - m - 1), total = Array.from({ length: n - 1 }, (_, m) => w(m)).reduce((a, b) => a + b, 0);
+    const P = { l: 44, r: 8, t: 10, b: 36 }, W = 340, H = 300, X = scale(0, n - 1, P.l, W - P.r), Y = scale(0, w(0), H - P.b, P.t);
+    drawAxes(bars, X, Y, { x0: P.l, x1: W - P.r, y0: H - P.b, y1: P.t, xd: [0, n - 1], yd: [0, w(0)], xt: [], yt: niceTicks(0, w(0), 4), xlab: "elimination step k", ylab: "flops" });
+    const bw = (X(1) - X(0)) - 2;
+    let cum = 0;
+    for (let m = 0; m < n - 1; m++) {
+      if (m <= k) cum += w(m);
+      sv("rect", { x: X(m) + 1, y: Y(w(m)), width: bw, height: Math.max(0, Y(0) - Y(w(m))), rx: 3, fill: m === k ? "var(--s2)" : (m < k ? "var(--s1)" : "var(--rule)") }, bars);
+      sv("text", { x: X(m) + 1 + bw / 2, y: H - P.b + 15, "text-anchor": "middle" }, bars).textContent = m + 1;
+    }
+    const done = k >= n - 1;
+    if (done) cum = total;
+    $("#bnarr").innerHTML = done
+      ? `<strong>Finished.</strong> Total ${total} flops, vs. &frac23;<i>n</i>&sup3; = ${fmt(2 / 3 * n ** 3, 1)}. The ratio is ${fmt(total / (2 / 3 * n ** 3), 3)}, and it approaches 1 as <i>n</i> grows. Doubling <i>n</i> makes the work about 8&times; larger.`
+      : `<strong>Step ${k + 1}:</strong> pivot at (${k + 1}, ${k + 1}). Multipliers for column ${k + 1}: ${n - k - 1} divisions. Updated block: ${n - k - 1}&times;${n - k - 1} entries, 2 flops each. This step costs ${w(k)} flops; running total ${cum}.`;
+  }
+  const bStep = new Stepper($("#bctl"), { total: n, onRender: renderBlock });
+  $("#nblk").addEventListener("input", e => { n = +e.target.value; $("#nval").textContent = n; bStep.setTotal(n); bStep.go(0); });
+  bStep.go(0);
+
+  /* ---------- seconds table ---------- */
+  const hms = s => s < 1e-3 ? fmt(s * 1e6, 3) + " µs" : s < 1 ? fmt(s * 1e3, 3) + " ms" : s < 120 ? fmt(s, 3) + " s" : s < 7200 ? fmt(s / 60, 3) + " min" : s < 172800 ? fmt(s / 3600, 3) + " h" : fmt(s / 86400, 3) + " days";
+  function renderSec() {
+    const N = +$("#nsec").value, k = +$("#kbs").value, sp = +$("#speed").value;
+    const lu = 2 / 3 * N ** 3, tri = 2 * N ** 2, inv = 2 * N ** 3;
+    const rows = [
+      ["Factor once, then k solves", lu + k * tri],
+      ["Compute A⁻¹, then k multiplies", inv + k * tri],
+      ["Re-eliminate from scratch for each b", k * (lu + tri)],
+    ];
+    $("#sectab").innerHTML = `<caption class="sr-only">Estimated cost for n = ${N}, k = ${k}</caption><thead><tr><th scope="col">Strategy</th><th scope="col">Flops</th><th scope="col">Time</th></tr></thead><tbody>` +
+      rows.map(([s, f]) => `<tr><td>${s.replace("k ", k + " ")}</td><td class="n">${fmtExp(f, 3)}</td><td class="n">${hms(f / sp)}</td></tr>`).join("") + "</tbody>";
+  }
+  ["nsec", "kbs", "speed"].forEach(id => $("#" + id).addEventListener("change", renderSec)); renderSec();
+  $("#check").addEventListener("click", () => {
+    const g = +$("#guess").value, ans = 0.02 * 512;
+    $("#guessOut").innerHTML = `<i>n</i> grew by 8, so the work grows by 8&sup3; = 512: about 0.02 &times; 512 &asymp; <strong>10 s</strong>.` +
+      (g > 0 ? ` Your guess was ${Math.abs(Math.log2(g / ans)) < 1 ? '<span class="good">within a factor of 2</span>' : `off by a factor of ${fmt(Math.max(g / ans, ans / g), 2)}`}.${g > 0 && g < 1.5 ? " (Guessing about 0.16 s means scaling like n, not n³.)" : ""}` : "");
+  });
+
+  /* ---------- scalar ---------- */
+  function renderScalar() {
+    const a = +$("#sa").value, b = +$("#sb").value;
+    const d = b / a, v = (1 / a) * b;
+    $("#sdiv").textContent = String(d);
+    $("#sinv").innerHTML = String(v) + (d === v ? ' <span class="good">(same)</span>' : ' <span class="bad">(different: an extra rounding)</span>');
+  }
+  ["sa", "sb"].forEach(id => $("#" + id).addEventListener("input", renderScalar)); renderScalar();
+
+  /* ---------- accuracy race ---------- */
+  function renderRace() {
+    const N = +$("#hn").value; $("#hnv").textContent = N;
+    const H = Array.from({ length: N }, (_, i) => Array.from({ length: N }, (_, j) => 1 / (i + j + 1)));
+    const xt = new Array(N).fill(1), b = LA.mv(H, xt);
+    const x1 = LA.solve(H, b), x2 = LA.mv(LA.inv(H), b);
+    const res = x => LA.norm2(LA.sub(b, LA.mv(H, x))) / LA.norm2(b), err = x => LA.norm2(LA.sub(x, xt)) / LA.norm2(xt);
+    const e = v => v === 0 ? "0" : fmtExp(v, 2);
+    $("#racetab").innerHTML = `<caption class="sr-only">Hilbert matrix, n = ${N}</caption><thead><tr><th scope="col">n = ${N}, cond(H) ≈ ${fmtExp(LA.cond2(H), 2)}</th><th scope="col">Error in x</th><th scope="col">Residual</th></tr></thead><tbody>
+      <tr><td>Pivoted LU (<code>solve</code>)</td><td class="n">${e(err(x1))}</td><td class="n"><span class="good">${e(res(x1))}</span></td></tr>
+      <tr><td><code>inv(H) @ b</code></td><td class="n">${e(err(x2))}</td><td class="n"><span class="bad">${e(res(x2))}</span></td></tr></tbody>`;
+  }
+  $("#hn").addEventListener("input", renderRace); renderRace();
+
+  /* ---------- heated rod ---------- */
+  function heatmap(M, title) {
+    const N = M.length, c = 180 / N, s = el("div", { class: "matwrap" });
+    const g = document.createElementNS(SVGNS, "svg");
+    g.setAttribute("viewBox", `0 0 ${N * c} ${N * c}`); g.setAttribute("width", N * c); g.setAttribute("height", N * c);
+    const mx = Math.max(...M.flat().map(Math.abs)); let nz = 0;
+    M.forEach((r, i) => r.forEach((v, j) => {
+      const z = Math.abs(v) < 1e-14; if (!z) nz++;
+      const a = z ? 0 : 0.25 + 0.75 * Math.abs(v) / mx;
+      sv("rect", { x: j * c, y: i * c, width: c - 0.8, height: c - 0.8, fill: z ? "var(--surface)" : "var(--s1)", "fill-opacity": z ? 1 : a.toFixed(2) }, g);
+    }));
+    g.setAttribute("role", "img"); g.setAttribute("aria-label", `${title}: ${nz} nonzero entries out of ${N * N}`);
+    s.append(g, el("div", { class: "cap", html: `${title}<br>${nz} nonzeros` }));
+    return { node: s, nz };
+  }
+  function renderHeat() {
+    const N = +$("#rn").value; $("#rnv").textContent = N;
+    const A = Array.from({ length: N }, (_, i) => Array.from({ length: N }, (_, j) => i === j ? 2 : Math.abs(i - j) === 1 ? -1 : 0));
+    const { L, U } = LA.lu(A, false), Ai = LA.inv(A), box = $("#heat"); box.innerHTML = "";
+    const hs = [heatmap(A, "<i>A</i>"), heatmap(L, "<i>L</i>"), heatmap(U, "<i>U</i>"), heatmap(Ai, "<i>A</i><sup>&minus;1</sup>")];
+    hs.forEach(h => box.append(h.node));
+    $("#heatnote").innerHTML = `At <i>n</i> = ${N}: <i>A</i> has ${hs[0].nz} nonzeros, <i>L</i> and <i>U</i> together ${hs[1].nz + hs[2].nz}, and <i>A</i><sup>&minus;1</sup> has <strong>${hs[3].nz}</strong>, every single entry.`;
+  }
+  $("#rn").addEventListener("input", renderHeat); renderHeat();
+})();
+</script>
+
+</main>
+<footer class="site">Interactive companion to the course notes. Every number on this page is computed live in your browser in IEEE double precision &mdash; the same arithmetic NumPy uses.</footer>
+</div>
+</body>
+</html>

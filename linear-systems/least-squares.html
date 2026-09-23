@@ -1,0 +1,619 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Least Squares and QR</title>
+<meta name="description" content="Fit data by minimizing squared residuals, see the projection behind the normal equations, and watch why QR beats them.">
+<style>
+:root {
+  color-scheme: light;
+  --bg: #fcfcfb;
+  --surface: #f3f2ef;
+  --ink: #111110;
+  --ink-2: #4a4946;
+  --ink-3: #6b6a66;
+  --rule: #d9d7d1;
+  --accent: #1f64b8;
+  --s1: #2a78d6;      /* blue: active row / series 1 */
+  --s2: #c9501f;      /* orange: pivot / series 2 */
+  --s3: #13875e;      /* aqua-green: L entries / series 3 */
+  --t1: #dbe8f8;      /* tints for cell highlights */
+  --t2: #fbe1d4;
+  --t3: #d5efe3;
+  --t4: #f5ecc8;
+  --focus: #1f64b8;
+  --maxw: 60rem;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #1a1a19;
+    --surface: #242422;
+    --ink: #f4f3ef;
+    --ink-2: #c3c2b7;
+    --ink-3: #a3a29a;
+    --rule: #3d3c39;
+    --accent: #7fb2f0;
+    --s1: #5a9cec;
+    --s2: #f08a5d;
+    --s3: #3cc392;
+    --t1: #1e3450;
+    --t2: #4a2a1b;
+    --t3: #173d2f;
+    --t4: #423a17;
+    --focus: #7fb2f0;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #1a1a19; --surface: #242422; --ink: #f4f3ef; --ink-2: #c3c2b7; --ink-3: #a3a29a;
+  --rule: #3d3c39; --accent: #7fb2f0; --s1: #5a9cec; --s2: #f08a5d; --s3: #3cc392;
+  --t1: #1e3450; --t2: #4a2a1b; --t3: #173d2f; --t4: #423a17; --focus: #7fb2f0;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html { background: var(--bg); }
+body {
+  margin: 0; background: var(--bg); color: var(--ink);
+  font: 17px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+.wrap { max-width: var(--maxw); margin: 0 auto; padding: 1.5rem 16px 4rem; }
+header.site { border-bottom: 1px solid var(--rule); margin-bottom: 2rem; padding-bottom: 1rem; }
+header.site .crumb { font-size: .9rem; color: var(--ink-3); margin: 0 0 .25rem; }
+header.site .crumb a { color: var(--ink-3); }
+h1 { font-size: 1.9rem; line-height: 1.2; margin: 0 0 .5rem; letter-spacing: -.01em; }
+h2 { font-size: 1.35rem; margin: 3rem 0 .5rem; line-height: 1.3; }
+h3 { font-size: 1.1rem; margin: 1.75rem 0 .4rem; }
+p { margin: .6rem 0; }
+.lede { font-size: 1.08rem; color: var(--ink-2); max-width: 44rem; }
+.muted { color: var(--ink-3); }
+a { color: var(--accent); }
+:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; border-radius: 3px; }
+.skip { position: absolute; left: -9999px; }
+.skip:focus { left: 1rem; top: 1rem; background: var(--bg); padding: .5rem; z-index: 10; }
+.panel { background: var(--surface); border-radius: 10px; padding: 1rem 1.1rem; margin: 1rem 0; overflow-x: auto; }
+.row { display: flex; flex-wrap: wrap; gap: 1.25rem; align-items: flex-start; }
+.col { flex: 1 1 18rem; min-width: 0; }
+.controls { display: flex; flex-wrap: wrap; gap: .5rem .75rem; align-items: center; margin: .75rem 0; }
+button, select, input[type=number], input[type=text] {
+  font: inherit; font-size: .95rem; color: var(--ink); background: var(--bg);
+  border: 1px solid var(--rule); border-radius: 7px; padding: .35rem .75rem; min-height: 2.25rem;
+}
+button { cursor: pointer; }
+button:hover:not(:disabled) { border-color: var(--ink-3); }
+button:disabled { opacity: .45; cursor: default; }
+button.primary { background: var(--accent); color: var(--bg); border-color: var(--accent); }
+input[type=number] { width: 5.5rem; }
+input[type=range] { accent-color: var(--accent); width: min(18rem, 100%); }
+label { font-size: .95rem; }
+.narr {
+  min-height: 4.5rem; border-left: 3px solid var(--accent); padding: .35rem .9rem; margin: .75rem 0;
+  background: var(--bg); border-radius: 0 6px 6px 0;
+}
+.narr strong { color: var(--ink); }
+.stepcount { font-size: .88rem; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.readout { font-variant-numeric: tabular-nums; }
+.readout dt { color: var(--ink-3); font-size: .88rem; }
+.readout dd { margin: 0 0 .5rem; font-size: 1.05rem; }
+.kv { display: grid; grid-template-columns: minmax(7rem, 48%) minmax(0, 1fr); gap: .15rem 1rem; font-variant-numeric: tabular-nums; }
+.kv > :nth-child(odd) { color: var(--ink-3); }
+.mono, code { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: .92em; }
+.math { font-family: "Cambria Math", "STIX Two Math", "Latin Modern Math", Georgia, serif; font-style: normal; }
+.math i, i.v { font-style: italic; }
+/* matrices */
+.mats { display: flex; flex-wrap: wrap; gap: 1rem 1.5rem; align-items: center; margin: .75rem 0; }
+.matwrap { display: inline-flex; flex-direction: column; align-items: center; gap: .2rem; }
+.matwrap .cap { font-size: .9rem; color: var(--ink-3); }
+table.mat { border-collapse: separate; border-spacing: 2px; position: relative; padding: 0 6px;
+  font-variant-numeric: tabular-nums; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: .92rem; }
+table.mat::before, table.mat::after { content: ""; position: absolute; top: 0; bottom: 0; width: 6px;
+  border: 1.5px solid var(--ink-2); }
+table.mat::before { left: 0; border-right: none; }
+table.mat::after { right: 0; border-left: none; }
+table.mat td { padding: .2rem .5rem; text-align: right; min-width: 3.2rem; border-radius: 4px;
+  transition: background-color .25s; }
+table.mat td.pivot { background: var(--t2); outline: 2px solid var(--s2); }
+table.mat td.hlrow { background: var(--t1); }
+table.mat td.src { background: var(--t4); }
+table.mat td.newL { background: var(--t3); outline: 2px solid var(--s3); }
+table.mat td.zeroed { color: var(--ink-3); }
+table.mat td.dim { color: var(--ink-3); opacity: .55; }
+table.mat td.done { background: var(--t3); }
+.op { font-size: 1.3rem; color: var(--ink-3); }
+/* legend chips */
+.legend { display: flex; flex-wrap: wrap; gap: .4rem 1rem; font-size: .88rem; color: var(--ink-2); margin: .25rem 0; }
+.chip { display: inline-block; width: .9rem; height: .9rem; border-radius: 3px; vertical-align: -2px; margin-right: .3rem; }
+/* svg */
+svg.plot { width: 100%; height: auto; display: block; overflow: visible; }
+svg.plot text { fill: var(--ink-2); font: 12px system-ui, sans-serif; }
+svg.plot .axis { stroke: var(--ink-3); stroke-width: 1; }
+svg.plot .grid { stroke: var(--rule); stroke-width: 1; }
+.fig { margin: .75rem 0; }
+.figcap { font-size: .9rem; color: var(--ink-3); margin-top: .35rem; }
+details { margin: .75rem 0; }
+summary { cursor: pointer; color: var(--accent); }
+.predict { background: var(--t4); border-radius: 8px; padding: .5rem .8rem; margin: .5rem 0; }
+.good { color: var(--s3); font-weight: 600; }
+.bad { color: var(--s2); font-weight: 600; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+nav.toc { font-size: .95rem; }
+nav.toc ol { padding-left: 1.2rem; margin: .25rem 0; }
+footer.site { margin-top: 4rem; padding-top: 1rem; border-top: 1px solid var(--rule); font-size: .88rem; color: var(--ink-3); }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+@media (max-width: 560px) { body { font-size: 16px; } h1 { font-size: 1.55rem; } table.mat td { min-width: 2.4rem; padding: .15rem .3rem; } }
+
+</style>
+<script>
+/* ---------- shared helpers: numerics, formatting, DOM, SVG, stepper ---------- */
+"use strict";
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
+const el = (tag, attrs = {}, ...kids) => {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (k === "class") e.className = v; else if (k === "html") e.innerHTML = v;
+    else if (k.startsWith("on")) e.addEventListener(k.slice(2), v); else e.setAttribute(k, v);
+  }
+  for (const k of kids) if (k != null) e.append(k.nodeType ? k : document.createTextNode(k));
+  return e;
+};
+const SVGNS = "http://www.w3.org/2000/svg";
+const sv = (tag, attrs = {}, parent) => {
+  const e = document.createElementNS(SVGNS, tag);
+  for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
+  if (parent) parent.appendChild(e);
+  return e;
+};
+const cssVar = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+
+/* number formatting */
+function fmt(x, d = 4) {
+  if (!isFinite(x)) return x > 0 ? "∞" : (x < 0 ? "−∞" : "NaN");
+  if (x === 0) return "0";
+  const a = Math.abs(x);
+  let s;
+  if (a >= 1e5 || a < 1e-3) s = fmtExp(x, d);
+  else { s = (+x.toFixed(d)).toString(); }
+  return s.replace("-", "−");
+}
+function fmtExp(x, d = 3) {
+  if (x === 0) return "0";
+  const e = Math.floor(Math.log10(Math.abs(x)));
+  let m = x / Math.pow(10, e);
+  if (Math.abs(+m.toFixed(d - 1)) >= 10) { m /= 10; return fmtExp(x, d); }
+  return (+m.toFixed(d - 1)).toString().replace("-", "−") + "×10" + sup(e);
+}
+function sup(n) {
+  const m = { "-": "⁻", "0": "⁰", "1": "¹", "2": "²", "3": "³", "4": "⁴", "5": "⁵", "6": "⁶", "7": "⁷", "8": "⁸", "9": "⁹" };
+  return String(n).split("").map(c => m[c] || c).join("");
+}
+function fmtFrac(x) { // nice display for values that are near simple fractions/integers
+  if (Math.abs(x - Math.round(x)) < 1e-12) return String(Math.round(x)).replace("-", "−");
+  return fmt(x, 4);
+}
+
+/* ---------- linear algebra (dense, arrays of arrays) ---------- */
+const LA = {
+  clone: A => A.map(r => r.slice()),
+  eye: n => Array.from({ length: n }, (_, i) => Array.from({ length: n }, (_, j) => +(i === j))),
+  zeros: (m, n) => Array.from({ length: m }, () => new Array(n).fill(0)),
+  T: A => A[0].map((_, j) => A.map(r => r[j])),
+  mul(A, B) {
+    const m = A.length, k = B.length, n = B[0].length, C = LA.zeros(m, n);
+    for (let i = 0; i < m; i++) for (let p = 0; p < k; p++) { const a = A[i][p]; if (a) for (let j = 0; j < n; j++) C[i][j] += a * B[p][j]; }
+    return C;
+  },
+  mv: (A, x) => A.map(r => r.reduce((s, a, j) => s + a * x[j], 0)),
+  dot: (x, y) => x.reduce((s, a, i) => s + a * y[i], 0),
+  norm2: x => Math.hypot(...x),
+  norm1: x => x.reduce((s, a) => s + Math.abs(a), 0),
+  normInf: x => Math.max(...x.map(Math.abs)),
+  sub: (x, y) => x.map((a, i) => a - y[i]),
+  matNorm1: A => Math.max(...A[0].map((_, j) => A.reduce((s, r) => s + Math.abs(r[j]), 0))),
+  matNormInf: A => Math.max(...A.map(r => r.reduce((s, a) => s + Math.abs(a), 0))),
+  /* LU with optional partial pivoting; returns {L,U,perm,swaps} */
+  lu(A0, pivot = true) {
+    const n = A0.length, U = LA.clone(A0), L = LA.eye(n), perm = [...Array(n).keys()];
+    for (let k = 0; k < n - 1; k++) {
+      if (pivot) {
+        let p = k; for (let i = k + 1; i < n; i++) if (Math.abs(U[i][k]) > Math.abs(U[p][k])) p = i;
+        if (p !== k) { [U[k], U[p]] = [U[p], U[k]]; [perm[k], perm[p]] = [perm[p], perm[k]];
+          for (let j = 0; j < k; j++) [L[k][j], L[p][j]] = [L[p][j], L[k][j]]; }
+      }
+      for (let i = k + 1; i < n; i++) {
+        const m = U[i][k] / U[k][k]; L[i][k] = m;
+        for (let j = k; j < n; j++) U[i][j] -= m * U[k][j];
+        U[i][k] = 0;
+      }
+    }
+    return { L, U, perm };
+  },
+  fwd(L, b) { const n = b.length, y = new Array(n); for (let i = 0; i < n; i++) { let s = b[i]; for (let j = 0; j < i; j++) s -= L[i][j] * y[j]; y[i] = s / L[i][i]; } return y; },
+  back(U, y) { const n = y.length, x = new Array(n); for (let i = n - 1; i >= 0; i--) { let s = y[i]; for (let j = i + 1; j < n; j++) s -= U[i][j] * x[j]; x[i] = s / U[i][i]; } return x; },
+  solve(A, b, pivot = true) { const { L, U, perm } = LA.lu(A, pivot); return LA.back(U, LA.fwd(L, perm.map(i => b[i]))); },
+  /* Gauss–Jordan inverse with partial pivoting (the usual textbook inverse) */
+  inv(A0) {
+    const n = A0.length, M = A0.map((r, i) => [...r, ...LA.eye(n)[i]]);
+    for (let k = 0; k < n; k++) {
+      let p = k; for (let i = k + 1; i < n; i++) if (Math.abs(M[i][k]) > Math.abs(M[p][k])) p = i;
+      [M[k], M[p]] = [M[p], M[k]];
+      const d = M[k][k]; for (let j = 0; j < 2 * n; j++) M[k][j] /= d;
+      for (let i = 0; i < n; i++) if (i !== k) { const m = M[i][k]; if (m) for (let j = 0; j < 2 * n; j++) M[i][j] -= m * M[k][j]; }
+    }
+    return M.map(r => r.slice(n));
+  },
+  /* Cholesky solve (for normal equations) */
+  cholSolve(A, b) {
+    const n = A.length, L = LA.zeros(n, n);
+    for (let j = 0; j < n; j++) {
+      let s = A[j][j]; for (let k = 0; k < j; k++) s -= L[j][k] * L[j][k];
+      if (!(s > 0)) return null;
+      L[j][j] = Math.sqrt(s);
+      for (let i = j + 1; i < n; i++) { let t = A[i][j]; for (let k = 0; k < j; k++) t -= L[i][k] * L[j][k]; L[i][j] = t / L[j][j]; }
+    }
+    const y = LA.fwd(L, b); return LA.back(LA.T(L), y);
+  },
+  /* Householder QR least squares: returns x minimising ||Ax-b|| */
+  qrSolve(A0, b0) {
+    const m = A0.length, n = A0[0].length, A = LA.clone(A0), b = b0.slice();
+    for (let k = 0; k < n; k++) {
+      let nr = 0; for (let i = k; i < m; i++) nr += A[i][k] * A[i][k]; nr = Math.sqrt(nr);
+      if (nr === 0) continue;
+      const alpha = A[k][k] > 0 ? -nr : nr, v = new Array(m).fill(0);
+      v[k] = A[k][k] - alpha; for (let i = k + 1; i < m; i++) v[i] = A[i][k];
+      let vv = 0; for (let i = k; i < m; i++) vv += v[i] * v[i];
+      if (vv === 0) continue;
+      for (let j = k; j < n; j++) { let s = 0; for (let i = k; i < m; i++) s += v[i] * A[i][j]; s = 2 * s / vv; for (let i = k; i < m; i++) A[i][j] -= s * v[i]; }
+      let s = 0; for (let i = k; i < m; i++) s += v[i] * b[i]; s = 2 * s / vv; for (let i = k; i < m; i++) b[i] -= s * v[i];
+    }
+    const R = A.slice(0, n).map(r => r.slice(0, n));
+    return LA.back(R, b.slice(0, n));
+  },
+  /* singular values via one-sided Jacobi (accurate for small dense matrices) */
+  svals(A0) {
+    const m = A0.length, n = A0[0].length;
+    let U = A0.map(r => r.slice());
+    if (m < n) U = LA.T(U);
+    const cols = U[0].length, rows = U.length;
+    for (let sweep = 0; sweep < 60; sweep++) {
+      let off = 0;
+      for (let p = 0; p < cols - 1; p++) for (let q = p + 1; q < cols; q++) {
+        let a = 0, b = 0, c = 0;
+        for (let i = 0; i < rows; i++) { a += U[i][p] * U[i][p]; b += U[i][q] * U[i][q]; c += U[i][p] * U[i][q]; }
+        if (Math.abs(c) <= 1e-15 * Math.sqrt(a * b)) continue;
+        off = Math.max(off, Math.abs(c) / Math.sqrt(a * b));
+        const z = (b - a) / (2 * c), t = Math.sign(z || 1) / (Math.abs(z) + Math.sqrt(1 + z * z));
+        const cs = 1 / Math.sqrt(1 + t * t), sn = cs * t;
+        for (let i = 0; i < rows; i++) { const up = U[i][p], uq = U[i][q]; U[i][p] = cs * up - sn * uq; U[i][q] = sn * up + cs * uq; }
+      }
+      if (off < 1e-15) break;
+    }
+    const s = []; for (let j = 0; j < cols; j++) { let t = 0; for (let i = 0; i < rows; i++) t += U[i][j] * U[i][j]; s.push(Math.sqrt(t)); }
+    return s.sort((a, b) => b - a);
+  },
+  cond2(A) { const s = LA.svals(A); return s[0] / s[s.length - 1]; },
+};
+
+/* seeded PRNG so every student sees the same "random" numbers */
+function mulberry32(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+
+/* ---------- matrix rendering ---------- */
+/* cls(i,j) -> class name; fmtf(v,i,j) -> string */
+function matTable(M, { label = "matrix", cls = () => "", fmtf = v => fmtFrac(v), cap = null } = {}) {
+  const t = el("table", { class: "mat", "aria-label": `${label}, ${M.length} by ${M[0].length}` });
+  const tb = el("tbody"); t.append(tb);
+  M.forEach((r, i) => { const tr = el("tr"); r.forEach((v, j) => { const c = cls(i, j); tr.append(el("td", c ? { class: c } : {}, fmtf(v, i, j))); }); tb.append(tr); });
+  const w = el("div", { class: "matwrap" }, t);
+  if (cap) w.append(el("div", { class: "cap", html: cap }));
+  return w;
+}
+const colVec = x => x.map(v => [v]);
+
+/* ---------- linear scale + axes ---------- */
+function scale(d0, d1, r0, r1, log = false) {
+  if (log) { const a = Math.log10(d0), b = Math.log10(d1); const f = v => r0 + (Math.log10(v) - a) / (b - a) * (r1 - r0); f.inv = p => Math.pow(10, a + (p - r0) / (r1 - r0) * (b - a)); return f; }
+  const f = v => r0 + (v - d0) / (d1 - d0) * (r1 - r0); f.inv = p => d0 + (p - r0) / (r1 - r0) * (d1 - d0); return f;
+}
+function niceTicks(a, b, n = 6) {
+  const span = b - a, step0 = span / n, mag = Math.pow(10, Math.floor(Math.log10(step0)));
+  const step = [1, 2, 2.5, 5, 10].map(s => s * mag).find(s => span / s <= n) || 10 * mag;
+  const out = []; for (let v = Math.ceil(a / step) * step; v <= b + 1e-9 * step; v += step) out.push(+v.toFixed(10));
+  return out;
+}
+/* axes(svg, X, Y, {xt, yt, xlab, ylab, W, H, pad, log flags}) */
+function drawAxes(g, X, Y, o) {
+  const { x0, x1, y0, y1 } = o;
+  const xt = o.xt || niceTicks(o.xd[0], o.xd[1]), yt = o.yt || niceTicks(o.yd[0], o.yd[1]);
+  for (const t of yt) { sv("line", { x1: x0, x2: x1, y1: Y(t), y2: Y(t), class: "grid" }, g);
+    sv("text", { x: x0 - 6, y: Y(t) + 4, "text-anchor": "end" }, g).textContent = o.yfmt ? o.yfmt(t) : fmt(t, 3); }
+  for (const t of xt) { sv("line", { x1: X(t), x2: X(t), y1: y0, y2: y0 + 4, class: "axis" }, g);
+    sv("text", { x: X(t), y: y0 + 17, "text-anchor": "middle" }, g).textContent = o.xfmt ? o.xfmt(t) : fmt(t, 3); }
+  sv("line", { x1: x0, x2: x1, y1: y0, y2: y0, class: "axis" }, g);
+  sv("line", { x1: x0, x2: x0, y1: y0, y2: y1, class: "axis" }, g);
+  if (o.xlab) sv("text", { x: (x0 + x1) / 2, y: y0 + 36, "text-anchor": "middle" }, g).textContent = o.xlab;
+  if (o.ylab) { const t = sv("text", { x: 0, y: 0, "text-anchor": "middle", transform: `translate(${x0 - 46},${(y0 + y1) / 2}) rotate(-90)` }, g); t.textContent = o.ylab; }
+}
+
+/* ---------- stepper: prev / next / reset with aria-live narration ---------- */
+class Stepper {
+  constructor(root, { onRender, total, labels = {} }) {
+    this.i = 0; this.onRender = onRender; this.total = total;
+    this.prev = el("button", { type: "button", onclick: () => this.go(this.i - 1) }, labels.prev || "◀ Back");
+    this.next = el("button", { type: "button", class: "primary", onclick: () => this.go(this.i + 1) }, labels.next || "Next ▶");
+    this.reset = el("button", { type: "button", onclick: () => this.go(0) }, "Start over");
+    this.count = el("span", { class: "stepcount", "aria-hidden": "true" });
+    root.append(this.prev, this.next, this.reset, this.count);
+  }
+  setTotal(n) { this.total = n; this.go(Math.min(this.i, n - 1)); }
+  go(i) {
+    this.i = Math.max(0, Math.min(this.total - 1, i));
+    this.prev.disabled = this.i === 0; this.next.disabled = this.i === this.total - 1;
+    this.count.textContent = `Step ${this.i + 1} of ${this.total}`;
+    this.onRender(this.i);
+  }
+}
+
+/* announce helper for sliders etc. (debounced) */
+function makeAnnouncer(node) { let t; return msg => { clearTimeout(t); t = setTimeout(() => { node.textContent = msg; }, 350); }; }
+
+</script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<div class="wrap">
+<header class="site"><p class="crumb"><a href="index.html">Solving Linear Systems &mdash; explorers</a></p><p class="crumb">MATH/CCM 472/572 &middot; Solving Linear Systems</p></header>
+<main id="main">
+<!-- title: Least Squares and QR -->
+<!-- desc: Fit data by minimizing squared residuals, see the projection behind the normal equations, and watch why QR beats them. -->
+<h1>Least squares, the normal equations, and <i>QR</i></h1>
+<p class="lede">With more data points than unknowns, <i>A</i><i>x</i> = <i>b</i> usually has no solution. Least squares picks the <i>x</i> that makes the residual <i>r</i> = <i>b</i> &minus; <i>A</i><i>x</i> as short as possible. This page shows what that means in a picture, why the answer is unique, and why the way you compute it matters.</p>
+
+<nav class="toc panel" aria-label="On this page"><ol>
+  <li><a href="#fit">The &ldquo;least squares&rdquo;, drawn as actual squares</a></li>
+  <li><a href="#geo">The geometry: drop a perpendicular</a></li>
+  <li><a href="#thm">The theorem: exactly one best fit</a></li>
+  <li><a href="#ne">Normal equations vs. <i>QR</i></a></li>
+  <li><a href="#gs">Building <i>Q</i> and <i>R</i>: Gram&ndash;Schmidt</a></li>
+</ol></nav>
+
+<h2 id="fit">The &ldquo;least squares&rdquo;, drawn as actual squares</h2>
+<p>Each residual <i>r<sub>i</sub></i> is the vertical gap between a data point and the line. Least squares minimizes &sum; <i>r<sub>i</sub></i>&sup2;, the total <em>area</em> of the squares drawn on those gaps. Try to beat it by hand.</p>
+<div class="row">
+  <div class="col" style="flex-basis:24rem">
+    <svg id="fplot" class="plot" viewBox="0 0 420 420" role="group" aria-label="Data points, a fitted line, and residual squares. Points are focusable; arrow keys move them."></svg>
+    <div class="legend"><span><span class="chip" style="background:var(--s1)"></span>least-squares line and its squares</span><span><span class="chip" style="background:var(--s2)"></span>your line and its squares</span></div>
+  </div>
+  <div class="col">
+    <div class="controls"><label><input type="checkbox" id="mine" checked> Show my line</label><label><input type="checkbox" id="best"> Show the least-squares line</label></div>
+    <div class="controls"><label for="ia">My intercept <i>a</i> = <span id="iav"></span></label><input type="range" id="ia" min="-2" max="5" step="0.05" value="1"></div>
+    <div class="controls"><label for="ib">My slope <i>b</i> = <span id="ibv"></span></label><input type="range" id="ib" min="-2" max="3" step="0.05" value="0.5"></div>
+    <dl class="kv readout" id="fread" aria-live="polite"></dl>
+    <div class="controls"><button type="button" id="addpt">Add a point</button><button type="button" id="rmpt">Remove a point</button><button type="button" id="fres">Reset data</button></div>
+  </div>
+</div>
+
+<h2 id="geo">The geometry: drop a perpendicular</h2>
+<p>As <i>x</i> varies, <i>Ax</i> sweeps out the <strong>column space</strong> <i>C</i>(<i>A</i>): every combination of <i>A</i>&rsquo;s columns. With two columns it is a plane through the origin. <i>b</i> sits off that plane, and least squares asks which point of the plane is closest to <i>b</i>. The answer is the foot of the perpendicular, <i>b&#770;</i> = <i>A</i><i>x</i>*.</p>
+<p>Move the other point <i>y</i> = <i>A</i><i>c</i> around the plane: it is always farther from <i>b</i>, by exactly the Pythagorean theorem.</p>
+<div class="row">
+  <div class="col" style="flex-basis:24rem"><svg id="gplot" class="plot" viewBox="0 0 420 380" role="img" aria-label="3D view of the plane C(A), the point b, its projection b-hat, and another point y in the plane"></svg>
+    <div class="legend"><span><span class="chip" style="background:var(--ink)"></span><i>b</i></span><span><span class="chip" style="background:var(--s1)"></span><i>b&#770;</i> and the residual</span><span><span class="chip" style="background:var(--s2)"></span>another point <i>y</i></span></div></div>
+  <div class="col">
+    <div class="controls"><label for="az">Rotate</label><input type="range" id="az" min="-180" max="180" value="-35"></div>
+    <div class="controls"><label for="elv">Tilt</label><input type="range" id="elv" min="5" max="85" value="22"></div>
+    <div class="controls"><label for="c1"><i>y</i>: coefficient <i>c</i><sub>1</sub></label><input type="range" id="c1" min="-0.5" max="1.6" step="0.01" value="0.2"></div>
+    <div class="controls"><label for="c2"><i>y</i>: coefficient <i>c</i><sub>2</sub></label><input type="range" id="c2" min="-0.5" max="1.6" step="0.01" value="1.2"></div>
+    <dl class="kv readout" id="gread" aria-live="polite"></dl>
+  </div>
+</div>
+<p>&ldquo;The residual is perpendicular to the plane&rdquo; means it is perpendicular to every column of <i>A</i>: <i>A</i><sup>T</sup>(<i>b</i> &minus; <i>A</i><i>x</i>*) = 0. Rearranged, that is the <strong>normal equations</strong> <i>A</i><sup>T</sup><i>A</i><i>x</i>* = <i>A</i><sup>T</sup><i>b</i>: the same equations calculus gives when you set the gradient of &#8214;<i>Ax</i> &minus; <i>b</i>&#8214;&sup2; to zero.</p>
+
+<h2 id="thm">The theorem: exactly one best fit</h2>
+<blockquote class="panel" style="margin-left:0"><strong>Theorem.</strong> If <i>A</i> (<i>m</i>&times;<i>n</i>, <i>m</i> &ge; <i>n</i>) has full column rank, then min &#8214;<i>Ax</i> &minus; <i>b</i>&#8214;&sup2; has exactly one minimizer, <i>x</i>* = (<i>A</i><sup>T</sup><i>A</i>)<sup>&minus;1</sup><i>A</i><sup>T</sup><i>b</i>.</blockquote>
+<p>Step through the proof. At each step, try to answer the question before revealing why it holds.</p>
+<div class="panel">
+  <ol id="proof" style="padding-left:1.3rem"></ol>
+  <div class="controls" id="pctl"></div>
+</div>
+
+<h2 id="ne">Normal equations vs. <i>QR</i></h2>
+<p>In exact arithmetic the normal equations and <i>QR</i> give the same answer. In floating point, forming <i>A</i><sup>T</sup><i>A</i> <em>squares</em> the condition number: cond(<i>A</i><sup>T</sup><i>A</i>) = cond(<i>A</i>)&sup2;. Here a polynomial is fit through 14 equally spaced points on [0, 1]. The data are generated from known coefficients with no noise, so any error in the recovered coefficients is pure rounding.</p>
+<div class="controls"><label for="deg">Polynomial degree = <span id="degv">6</span></label><input type="range" id="deg" min="1" max="12" value="6"></div>
+<div class="row">
+  <div class="col" style="flex-basis:24rem"><svg id="nplot" class="plot" viewBox="0 0 460 320" role="img" aria-label="Log plot of coefficient error against polynomial degree for the normal equations and QR"></svg>
+    <div class="legend"><span><span class="chip" style="background:var(--s2)"></span>normal equations</span><span><span class="chip" style="background:var(--s1)"></span><i>QR</i></span></div></div>
+  <div class="col"><dl class="kv readout" id="nread" aria-live="polite"></dl>
+    <p class="figcap"><i>QR</i> loses digits in proportion to cond(<i>A</i>). The normal equations lose them in proportion to cond(<i>A</i>)&sup2;, twice as many digits. Past degree 10, cond(<i>A</i><sup>T</sup><i>A</i>) passes 10<sup>16</sup> and the normal equations lose every digit, even though <i>A</i> itself is nowhere near singular.</p></div>
+</div>
+
+<h2 id="gs">Building <i>Q</i> and <i>R</i>: Gram&ndash;Schmidt</h2>
+<p><i>QR</i> replaces the columns of <i>A</i> with an orthonormal set <i>q</i><sub>1</sub>, <i>q</i><sub>2</sub>, &hellip; spanning the same space, and records the bookkeeping in an upper-triangular <i>R</i>. Projecting onto orthonormal vectors needs only dot products, which is why the least-squares answer then drops out of <i>R</i><i>x</i> = <i>Q</i><sup>T</sup><i>b</i> with no <i>A</i><sup>T</sup><i>A</i> in sight. Step through classical Gram&ndash;Schmidt on three vectors in 3D.</p>
+<div class="panel">
+  <div class="row">
+    <div class="col" style="flex-basis:22rem"><svg id="gsplot" class="plot" viewBox="0 0 400 360" role="img" aria-label="3D view of the Gram-Schmidt step"></svg>
+      <div class="controls"><label for="gaz">Rotate</label><input type="range" id="gaz" min="-180" max="180" value="-50"></div></div>
+    <div class="col"><div id="gsmats" class="mats"></div></div>
+  </div>
+  <div id="gsnarr" class="narr" aria-live="polite"></div>
+  <div class="controls" id="gsctl"></div>
+</div>
+
+<script>
+(() => {
+  /* ================= residual squares ================= */
+  const W = 420, P = 36, X = scale(-2, 4, P, W - 10), Y = scale(-1, 5, W - P, 10);
+  const fs = $("#fplot"), DEF = [[-1, 0], [0, 3], [1, 4], [2, 3]];
+  let pts = DEF.map(p => p.slice());
+  const fitLine = () => { const A = pts.map(p => [1, p[0]]), b = pts.map(p => p[1]); return LA.qrSolve(A, b); };
+  const sse = (a, b) => pts.reduce((s, p) => s + (p[1] - a - b * p[0]) ** 2, 0);
+  function renderF() {
+    fs.innerHTML = "";
+    drawAxes(fs, X, Y, { x0: P, x1: W - 10, y0: W - P, y1: 10, xd: [-2, 4], yd: [-1, 5], xlab: "x", ylab: "y" });
+    const cp = sv("clipPath", { id: "clipF" }, sv("defs", {}, fs)); sv("rect", { x: P, y: 10, width: W - 10 - P, height: W - P - 10 }, cp);
+    const g = sv("g", { "clip-path": "url(#clipF)" }, fs);
+    const [a0, b0] = fitLine(), ua = +$("#ia").value, ub = +$("#ib").value;
+    $("#iav").textContent = fmt(ua, 2); $("#ibv").textContent = fmt(ub, 2);
+    const drawFit = (a, b, col) => {
+      pts.forEach(p => { const yh = a + b * p[0], r = p[1] - yh, side = Math.abs(r);
+        const x0 = r > 0 ? p[0] : p[0] - side;  // square to the right if above the line, to the left if below
+        sv("rect", { x: X(Math.min(p[0], p[0] + (r > 0 ? side : -side))), y: Y(Math.max(p[1], yh)), width: X(side) - X(0), height: Y(0) - Y(side), fill: col, "fill-opacity": .14, stroke: col, "stroke-width": 1 }, g);
+        sv("line", { x1: X(p[0]), x2: X(p[0]), y1: Y(p[1]), y2: Y(yh), stroke: col, "stroke-width": 1.5 }, g); });
+      sv("line", { x1: X(-2), y1: Y(a - 2 * b), x2: X(4), y2: Y(a + 4 * b), stroke: col, "stroke-width": 2.5 }, g);
+    };
+    if ($("#best").checked) drawFit(a0, b0, "var(--s1)");
+    if ($("#mine").checked) drawFit(ua, ub, "var(--s2)");
+    const gp = sv("g", {}, fs);
+    pts.forEach((p, i) => { const h = sv("g", { tabindex: 0, role: "button", class: "pt", "aria-label": `Data point ${i + 1} at (${fmt(p[0], 2)}, ${fmt(p[1], 2)})` }, gp); h.dataset.i = i; h.style.cursor = "grab";
+      sv("circle", { cx: X(p[0]), cy: Y(p[1]), r: 15, fill: "transparent" }, h); sv("circle", { cx: X(p[0]), cy: Y(p[1]), r: 6.5, fill: "var(--ink)", stroke: "var(--bg)", "stroke-width": 2 }, h); });
+    const best = sse(a0, b0), mine = sse(ua, ub);
+    $("#fread").innerHTML = `<dt>Your line</dt><dd><i>y</i> = ${fmt(ua, 2)} + ${fmt(ub, 2)}<i>x</i></dd><dt>your &sum;<i>r<sub>i</sub></i>&sup2;</dt><dd>${fmt(mine, 4)}</dd>
+      <dt>Least squares</dt><dd>${$("#best").checked ? `<i>y</i> = ${fmt(a0, 4)} + ${fmt(b0, 4)}<i>x</i>` : "(check the box to reveal)"}</dd><dt>smallest possible &sum;<i>r<sub>i</sub></i>&sup2;</dt><dd>${fmt(best, 4)}</dd>
+      <dt>You are</dt><dd>${mine - best < 1e-3 ? '<span class="good">at the minimum</span>' : fmt(mine - best, 3) + " above the minimum"}</dd>`;
+  }
+  let dragF = null;
+  const toD = (svg, e, XX, YY, WW, HH) => { const r = svg.getBoundingClientRect(); return [XX.inv((e.clientX - r.left) * WW / r.width), YY.inv((e.clientY - r.top) * HH / r.height)]; };
+  const cl = (v, a, b) => Math.max(a, Math.min(b, Math.round(v * 20) / 20));
+  fs.addEventListener("pointerdown", e => { const g = e.target.closest(".pt"); if (!g) return; dragF = +g.dataset.i; fs.setPointerCapture(e.pointerId); e.preventDefault(); });
+  fs.addEventListener("pointermove", e => { if (dragF == null) return; const [x, y] = toD(fs, e, X, Y, W, W); pts[dragF] = [cl(x, -1.8, 3.8), cl(y, -0.8, 4.8)]; renderF(); });
+  fs.addEventListener("pointerup", () => { if (dragF != null) { const i = dragF; dragF = null; renderF(); $$(".pt", fs)[i].focus({ preventScroll: true }); } });
+  fs.addEventListener("keydown", e => { const g = e.target.closest(".pt"); if (!g) return; const i = +g.dataset.i, d = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, 1], ArrowDown: [0, -1] }[e.key]; if (!d) return;
+    e.preventDefault(); const s = e.shiftKey ? .5 : .1; pts[i] = [cl(pts[i][0] + d[0] * s, -1.8, 3.8), cl(pts[i][1] + d[1] * s, -0.8, 4.8)]; renderF(); $$(".pt", fs)[i].focus(); });
+  ["ia", "ib"].forEach(id => $("#" + id).addEventListener("input", renderF));
+  ["mine", "best"].forEach(id => $("#" + id).addEventListener("change", renderF));
+  const r0 = mulberry32(7);
+  $("#addpt").addEventListener("click", () => { if (pts.length < 10) { pts.push([cl(r0() * 5 - 1.5, -1.8, 3.8), cl(r0() * 4 + 0.3, -0.8, 4.8)]); renderF(); } });
+  $("#rmpt").addEventListener("click", () => { if (pts.length > 2) { pts.pop(); renderF(); } });
+  $("#fres").addEventListener("click", () => { pts = DEF.map(p => p.slice()); renderF(); });
+  renderF();
+
+  /* ================= 3D helpers ================= */
+  function view(az, el, sc, cx, cy) {
+    const t = az * Math.PI / 180, p = el * Math.PI / 180;
+    return v => { const x1 = Math.cos(t) * v[0] - Math.sin(t) * v[1], y1 = Math.sin(t) * v[0] + Math.cos(t) * v[1];
+      return [cx + sc * x1, cy - sc * (v[2] * Math.cos(p) - y1 * Math.sin(p))]; };
+  }
+  function arrow(g, a, b, col, w = 2.5, dash) {
+    sv("line", { x1: a[0], y1: a[1], x2: b[0], y2: b[1], stroke: col, "stroke-width": w, "stroke-dasharray": dash || "" }, g);
+    const dx = b[0] - a[0], dy = b[1] - a[1], L = Math.hypot(dx, dy); if (L < 4) return;
+    const ux = dx / L, uy = dy / L, s = 9;
+    sv("polygon", { points: `${b[0]},${b[1]} ${b[0] - s * ux + s * .45 * uy},${b[1] - s * uy - s * .45 * ux} ${b[0] - s * ux - s * .45 * uy},${b[1] - s * uy + s * .45 * ux}`, fill: col }, g);
+  }
+  const lbl = (g, p, t, col = "var(--ink)", dx = 8, dy = -8) => { const e = sv("text", { x: p[0] + dx, y: p[1] + dy, style: `fill:${col};font-size:14px;font-style:italic` }, g); e.textContent = t; };
+  const add = (a, b) => a.map((v, i) => v + b[i]), scl = (s, a) => a.map(v => s * v);
+
+  /* ================= projection picture ================= */
+  const a1 = [1, 0, 0.25], a2 = [0, 1, 0.15], bv = [0.9, 0.7, 1.3];
+  const Ag = [[a1[0], a2[0]], [a1[1], a2[1]], [a1[2], a2[2]]];
+  const xs = LA.qrSolve(Ag, bv), bh = LA.mv(Ag, xs);
+  const gs = $("#gplot");
+  function renderG() {
+    const V = view(+$("#az").value, +$("#elv").value, 130, 200, 230), c = [+$("#c1").value, +$("#c2").value], y = LA.mv(Ag, c);
+    gs.innerHTML = "";
+    const corners = [[-0.6, -0.6], [1.7, -0.6], [1.7, 1.7], [-0.6, 1.7]].map(([s, t]) => V(add(scl(s, a1), scl(t, a2))));
+    sv("polygon", { points: corners.map(p => p.join(",")).join(" "), fill: "var(--s1)", "fill-opacity": .1, stroke: "var(--s1)", "stroke-opacity": .5 }, gs);
+    for (let k = -0.5; k <= 1.6; k += 0.5) { const p = [V(add(scl(k, a1), scl(-0.6, a2))), V(add(scl(k, a1), scl(1.7, a2)))], q = [V(add(scl(-0.6, a1), scl(k, a2))), V(add(scl(1.7, a1), scl(k, a2)))];
+      sv("line", { x1: p[0][0], y1: p[0][1], x2: p[1][0], y2: p[1][1], stroke: "var(--s1)", "stroke-opacity": .18 }, gs); sv("line", { x1: q[0][0], y1: q[0][1], x2: q[1][0], y2: q[1][1], stroke: "var(--s1)", "stroke-opacity": .18 }, gs); }
+    const O = V([0, 0, 0]);
+    lbl(gs, corners[2], "C(A)", "var(--s1)", 4, 14);
+    arrow(gs, O, V(a1), "var(--ink-3)", 1.8); arrow(gs, O, V(a2), "var(--ink-3)", 1.8);
+    lbl(gs, V(a1), "a₁", "var(--ink-3)"); lbl(gs, V(a2), "a₂", "var(--ink-3)");
+    arrow(gs, O, V(bv), "var(--ink)", 2.5); lbl(gs, V(bv), "b");
+    sv("line", { x1: V(bv)[0], y1: V(bv)[1], x2: V(y)[0], y2: V(y)[1], stroke: "var(--s2)", "stroke-width": 2, "stroke-dasharray": "5 4" }, gs);
+    sv("line", { x1: V(bh)[0], y1: V(bh)[1], x2: V(y)[0], y2: V(y)[1], stroke: "var(--s2)", "stroke-width": 1.5 }, gs);
+    sv("line", { x1: V(bv)[0], y1: V(bv)[1], x2: V(bh)[0], y2: V(bh)[1], stroke: "var(--s1)", "stroke-width": 2.5 }, gs);
+    sv("circle", { cx: V(bh)[0], cy: V(bh)[1], r: 5, fill: "var(--s1)" }, gs); lbl(gs, V(bh), "b̂", "var(--s1)", 8, 16);
+    sv("circle", { cx: V(y)[0], cy: V(y)[1], r: 5, fill: "var(--s2)" }, gs); lbl(gs, V(y), "y", "var(--s2)", 8, 16);
+    const d1 = LA.norm2(LA.sub(bv, bh)) ** 2, d2 = LA.norm2(LA.sub(bh, y)) ** 2, d3 = LA.norm2(LA.sub(bv, y)) ** 2;
+    const r = LA.sub(bv, bh);
+    $("#gread").innerHTML = `<dt>&#8214;<i>b</i> &minus; <i>b&#770;</i>&#8214;&sup2;</dt><dd>${fmt(d1, 4)}</dd><dt>&#8214;<i>b&#770;</i> &minus; <i>y</i>&#8214;&sup2;</dt><dd>${fmt(d2, 4)}</dd>
+      <dt>sum</dt><dd>${fmt(d1 + d2, 4)}</dd><dt>&#8214;<i>b</i> &minus; <i>y</i>&#8214;&sup2;</dt><dd><strong>${fmt(d3, 4)}</strong></dd>
+      <dt>residual &middot; <i>a</i><sub>1</sub>, residual &middot; <i>a</i><sub>2</sub></dt><dd>${[a1, a2].map(v => { const d = LA.dot(r, v); return Math.abs(d) < 1e-12 ? "0 (to rounding)" : fmt(d, 3); }).join(", ")}</dd>`;
+  }
+  ["az", "elv", "c1", "c2"].forEach(id => $("#" + id).addEventListener("input", renderG)); renderG();
+
+  /* ================= proof stepper ================= */
+  const PROOF = [
+    ["Suppose <i>A</i><sup>T</sup><i>A</i><i>y</i> = 0 for some <i>y</i>. Multiply on the left by <i>y</i><sup>T</sup>: <i>y</i><sup>T</sup><i>A</i><sup>T</sup><i>A</i><i>y</i> = 0.", "What is <i>y</i><sup>T</sup><i>A</i><sup>T</sup><i>A</i><i>y</i>, written as a norm?", "<i>y</i><sup>T</sup><i>A</i><sup>T</sup><i>A</i><i>y</i> = (<i>Ay</i>)<sup>T</sup>(<i>Ay</i>) = &#8214;<i>Ay</i>&#8214;&sup2;, so &#8214;<i>Ay</i>&#8214; = 0 and <i>Ay</i> = 0."],
+    ["So <i>Ay</i> = 0, which forces <i>y</i> = 0.", "Which hypothesis does this use?", "Full column rank: the columns of <i>A</i> are linearly independent, so the only combination giving 0 is the zero combination."],
+    ["Therefore <i>A</i><sup>T</sup><i>A</i> is invertible.", "Why does a trivial null space make it invertible?", "<i>A</i><sup>T</sup><i>A</i> is square (<i>n</i>&times;<i>n</i>), and a square matrix whose only null vector is 0 is invertible."],
+    ["Setting the gradient of &phi;(<i>x</i>) = &#8214;<i>Ax</i> &minus; <i>b</i>&#8214;&sup2; to zero gives 2<i>A</i><sup>T</sup>(<i>Ax</i> &minus; <i>b</i>) = 0, the normal equations, with the single solution <i>x</i>* = (<i>A</i><sup>T</sup><i>A</i>)<sup>&minus;1</sup><i>A</i><sup>T</sup><i>b</i>.", "Is a point where the gradient vanishes automatically a minimum?", "No, only a candidate. The last step checks it directly."],
+    ["For any other point <i>x</i>* + <i>h</i> with <i>h</i> &ne; 0: &phi;(<i>x</i>* + <i>h</i>) = &phi;(<i>x</i>*) + 2<i>h</i><sup>T</sup><i>A</i><sup>T</sup>(<i>Ax</i>* &minus; <i>b</i>) + &#8214;<i>Ah</i>&#8214;&sup2;.", "What happens to the middle term, and why is the last term strictly positive?", "The middle term is 0 by the normal equations. &#8214;<i>Ah</i>&#8214;&sup2; &gt; 0 because <i>h</i> &ne; 0 and <i>A</i> has full column rank. So every other point does strictly worse: <i>x</i>* is the unique minimizer. &#8718;"],
+  ];
+  let pShown = 0, pRevealed = false;
+  function renderP(i) {
+    // step index i: 2 sub-steps per proof line (statement+question, then reveal)
+    const line = Math.floor(i / 2), rev = i % 2 === 1, ol = $("#proof"); ol.innerHTML = "";
+    PROOF.forEach(([s, q, a], k) => { if (k > line) return;
+      const li = el("li", { style: "margin:.6rem 0" }, el("span", { html: s }));
+      if (k < line || rev) li.append(el("div", { class: "muted", style: "margin-top:.25rem", html: `<em>Why:</em> ${a}` }));
+      else li.append(el("div", { class: "predict", html: `<strong>Think:</strong> ${q}` }));
+      ol.append(li); });
+  }
+  const pStep = new Stepper($("#pctl"), { total: PROOF.length * 2, onRender: renderP, labels: { next: "Next ▶" } }); pStep.go(0);
+
+  /* ================= normal equations vs QR ================= */
+  const rg = mulberry32(2026), gauss = () => { const u = 1 - rg(), v = rg(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v); };
+  const tc = Array.from({ length: 14 }, gauss), m = 14, xsd = Array.from({ length: m }, (_, i) => i / (m - 1));
+  const res = [];
+  for (let d = 1; d <= 12; d++) {
+    const n = d + 1, A = xsd.map(x => Array.from({ length: n }, (_, j) => x ** j)), c = tc.slice(0, n), y = LA.mv(A, c), At = LA.T(A);
+    const ne = LA.solve(LA.mul(At, A), LA.mv(At, y)), qr = LA.qrSolve(A, y), e = x => LA.norm2(LA.sub(x, c)) / LA.norm2(c), k = LA.cond2(A);
+    res.push({ d, k, eN: Math.max(e(ne), 1e-17), eQ: Math.max(e(qr), 1e-17) });
+  }
+  const NW = 460, NH = 320, NP = { l: 60, r: 12, t: 12, b: 44 }, NX = scale(1, 12, NP.l, NW - NP.r), NY = scale(-17, 2, NH - NP.b, NP.t), ns = $("#nplot");
+  function renderN() {
+    const d = +$("#deg").value, r = res[d - 1]; $("#degv").textContent = d; ns.innerHTML = "";
+    drawAxes(ns, NX, NY, { x0: NP.l, x1: NW - NP.r, y0: NH - NP.b, y1: NP.t, xd: [1, 12], yd: [-17, 2], xt: [1, 2, 4, 6, 8, 10, 12], yt: [-16, -12, -8, -4, 0], yfmt: t => "10" + sup(t), xfmt: t => t, xlab: "polynomial degree", ylab: "relative error in coefficients" });
+    sv("line", { x1: NX(d), x2: NX(d), y1: NP.t, y2: NH - NP.b, stroke: "var(--ink-3)", "stroke-dasharray": "4 3" }, ns);
+    [["eN", "var(--s2)"], ["eQ", "var(--s1)"]].forEach(([k, col]) => {
+      sv("path", { d: res.map((q, i) => (i ? "L" : "M") + NX(q.d) + "," + NY(Math.log10(q[k]))).join(""), fill: "none", stroke: col, "stroke-width": 2 }, ns);
+      res.forEach(q => sv("circle", { cx: NX(q.d), cy: NY(Math.log10(q[k])), r: q.d === d ? 6 : 3.5, fill: col, stroke: "var(--bg)", "stroke-width": q.d === d ? 2 : 1 }, ns)); });
+    $("#nread").innerHTML = `<dt>unknowns <i>n</i></dt><dd>${d + 1} (14 data points)</dd><dt>cond(<i>A</i>)</dt><dd>${fmtExp(r.k, 3)}</dd><dt>cond(<i>A</i><sup>T</sup><i>A</i>) &asymp; cond(<i>A</i>)&sup2;</dt><dd>${fmtExp(r.k * r.k, 3)}</dd>
+      <dt>error, normal equations</dt><dd class="${r.eN > 1e-6 ? "bad" : ""}">${fmtExp(r.eN, 2)}</dd><dt>error, <i>QR</i></dt><dd class="good">${fmtExp(r.eQ, 2)}</dd>`;
+  }
+  $("#deg").addEventListener("input", renderN); renderN();
+
+  /* ================= Gram–Schmidt ================= */
+  const A3 = [[1, 1, 0], [1, 0, 1], [0, 1, 1]];  // columns a1, a2, a3 (stored as rows here)
+  const a = A3.map(c => c.slice());
+  const q1 = scl(1 / LA.norm2(a[0]), a[0]), r12 = LA.dot(q1, a[1]), v2 = LA.sub(a[1], scl(r12, q1)), q2 = scl(1 / LA.norm2(v2), v2);
+  const r13 = LA.dot(q1, a[2]), r23 = LA.dot(q2, a[2]), v3 = LA.sub(LA.sub(a[2], scl(r13, q1)), scl(r23, q2)), q3 = scl(1 / LA.norm2(v3), v3);
+  const R = [[LA.norm2(a[0]), r12, r13], [0, LA.norm2(v2), r23], [0, 0, LA.norm2(v3)]];
+  const f3 = v => fmt(v, 3), vec = v => `(${v.map(f3).join(", ")})`;
+  const GS = [
+    { show: { a: [0, 1, 2] }, R: 0, narr: `Three columns: <i>a</i><sub>1</sub> = ${vec(a[0])}, <i>a</i><sub>2</sub> = ${vec(a[1])}, <i>a</i><sub>3</sub> = ${vec(a[2])}. They span 3D space but are not perpendicular to each other.` },
+    { show: { a: [0, 1, 2], q: [0] }, R: 1, narr: `<strong><i>q</i><sub>1</sub>:</strong> normalize <i>a</i><sub>1</sub>. Its length <i>r</i><sub>11</sub> = &#8214;<i>a</i><sub>1</sub>&#8214; = ${f3(R[0][0])}, so <i>q</i><sub>1</sub> = <i>a</i><sub>1</sub>/${f3(R[0][0])} = ${vec(q1)}.` },
+    { show: { a: [1, 2], q: [0], proj: [1, q1, r12] }, R: 2, narr: `<strong>Strip <i>a</i><sub>2</sub> of its <i>q</i><sub>1</sub> part.</strong> The component along <i>q</i><sub>1</sub> has size <i>r</i><sub>12</sub> = <i>q</i><sub>1</sub>&middot;<i>a</i><sub>2</sub> = ${f3(r12)} (dashed). What is left, <i>v</i><sub>2</sub> = <i>a</i><sub>2</sub> &minus; ${f3(r12)}<i>q</i><sub>1</sub> = ${vec(v2)}, is perpendicular to <i>q</i><sub>1</sub>.` },
+    { show: { a: [2], q: [0, 1] }, R: 3, narr: `<strong><i>q</i><sub>2</sub>:</strong> normalize <i>v</i><sub>2</sub>. <i>r</i><sub>22</sub> = &#8214;<i>v</i><sub>2</sub>&#8214; = ${f3(R[1][1])}, so <i>q</i><sub>2</sub> = ${vec(q2)}. Check: <i>q</i><sub>1</sub>&middot;<i>q</i><sub>2</sub> = ${f3(LA.dot(q1, q2))}.` },
+    { show: { a: [2], q: [0, 1], proj: [2, q1, r13], proj2: [2, q2, r23] }, R: 4, narr: `<strong>Strip <i>a</i><sub>3</sub> of its <i>q</i><sub>1</sub> and <i>q</i><sub>2</sub> parts.</strong> <i>r</i><sub>13</sub> = <i>q</i><sub>1</sub>&middot;<i>a</i><sub>3</sub> = ${f3(r13)}, <i>r</i><sub>23</sub> = <i>q</i><sub>2</sub>&middot;<i>a</i><sub>3</sub> = ${f3(r23)}. Subtract both projections: <i>v</i><sub>3</sub> = ${vec(v3)}. (Classical Gram&ndash;Schmidt computes both dot products from the original <i>a</i><sub>3</sub>.)` },
+    { show: { q: [0, 1, 2] }, R: 5, narr: `<strong><i>q</i><sub>3</sub>:</strong> <i>r</i><sub>33</sub> = &#8214;<i>v</i><sub>3</sub>&#8214; = ${f3(R[2][2])}, <i>q</i><sub>3</sub> = ${vec(q3)}. Three mutually perpendicular unit vectors. Every number you computed went into <i>R</i>, and <i>A</i> = <i>QR</i>.` },
+  ];
+  const gss = $("#gsplot");
+  const COLS = ["var(--s1)", "var(--s2)", "var(--s3)"];
+  function renderGS(i) {
+    const s = GS[i], V = view(+$("#gaz").value, 24, 140, 200, 220); gss.innerHTML = "";
+    const O = V([0, 0, 0]);
+    [[1.3, 0, 0], [0, 1.3, 0], [0, 0, 1.3]].forEach((e, k) => { arrow(gss, O, V(e), "var(--rule)", 1); lbl(gss, V(e), ["x", "y", "z"][k], "var(--ink-3)", 4, 4); });
+    (s.show.a || []).forEach(k => { arrow(gss, O, V(a[k]), "var(--ink-3)", 2); lbl(gss, V(a[k]), `a${"₁₂₃"[k]}`, "var(--ink-3)"); });
+    [s.show.proj, s.show.proj2].forEach(pj => { if (!pj) return; const [k, q, r] = pj, p = scl(r, q);
+      arrow(gss, O, V(p), "var(--ink)", 2, "5 4"); sv("line", { x1: V(p)[0], y1: V(p)[1], x2: V(a[k])[0], y2: V(a[k])[1], stroke: "var(--ink-3)", "stroke-dasharray": "2 3" }, gss); });
+    if (i === 2) { arrow(gss, O, V(v2), "var(--s2)", 2.5); lbl(gss, V(v2), "v₂", "var(--s2)"); }
+    if (i === 4) { arrow(gss, O, V(v3), "var(--s3)", 2.5); lbl(gss, V(v3), "v₃", "var(--s3)"); }
+    [q1, q2, q3].forEach((q, k) => { if ((s.show.q || []).includes(k)) { arrow(gss, O, V(q), COLS[k], 3); lbl(gss, V(q), `q${"₁₂₃"[k]}`, COLS[k]); } });
+    const known = [[1, 2, 4], [0, 3, 4], [0, 0, 5]]; // step at which R[i][j] becomes known
+    const box = $("#gsmats"); box.innerHTML = "";
+    box.append(matTable(R, { label: "R", cap: "<i>R</i>", fmtf: (v, r, c) => r > c ? "0" : (known[r][c] <= s.R ? f3(v) : "?"), cls: (r, c) => r <= c && known[r][c] === s.R ? "newL" : (r <= c && known[r][c] > s.R ? "dim" : "") }));
+    $("#gsnarr").innerHTML = s.narr;
+  }
+  const gsStep = new Stepper($("#gsctl"), { total: GS.length, onRender: renderGS });
+  $("#gaz").addEventListener("input", () => renderGS(gsStep.i));
+  gsStep.go(0);
+})();
+</script>
+
+</main>
+<footer class="site">Interactive companion to the course notes. Every number on this page is computed live in your browser in IEEE double precision &mdash; the same arithmetic NumPy uses.</footer>
+</div>
+</body>
+</html>
