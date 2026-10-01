@@ -1,0 +1,585 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Layers of a Picture</title>
+<meta name="description" content="Compress an image by keeping its first k SVD layers, and check the Eckart-Young error prediction against the pixels.">
+<style>
+:root {
+  color-scheme: light;
+  --bg: #fcfcfb;
+  --surface: #f3f2ef;
+  --ink: #111110;
+  --ink-2: #4a4946;
+  --ink-3: #6b6a66;
+  --rule: #d9d7d1;
+  --accent: #1f64b8;
+  --s1: #2a78d6;      /* blue: active row / series 1 */
+  --s2: #c9501f;      /* orange: pivot / series 2 */
+  --s3: #13875e;      /* aqua-green: L entries / series 3 */
+  --t1: #dbe8f8;      /* tints for cell highlights */
+  --t2: #fbe1d4;
+  --t3: #d5efe3;
+  --t4: #f5ecc8;
+  --focus: #1f64b8;
+  --maxw: 60rem;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #1a1a19;
+    --surface: #242422;
+    --ink: #f4f3ef;
+    --ink-2: #c3c2b7;
+    --ink-3: #a3a29a;
+    --rule: #3d3c39;
+    --accent: #7fb2f0;
+    --s1: #5a9cec;
+    --s2: #f08a5d;
+    --s3: #3cc392;
+    --t1: #1e3450;
+    --t2: #4a2a1b;
+    --t3: #173d2f;
+    --t4: #423a17;
+    --focus: #7fb2f0;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #1a1a19; --surface: #242422; --ink: #f4f3ef; --ink-2: #c3c2b7; --ink-3: #a3a29a;
+  --rule: #3d3c39; --accent: #7fb2f0; --s1: #5a9cec; --s2: #f08a5d; --s3: #3cc392;
+  --t1: #1e3450; --t2: #4a2a1b; --t3: #173d2f; --t4: #423a17; --focus: #7fb2f0;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html { background: var(--bg); }
+body {
+  margin: 0; background: var(--bg); color: var(--ink);
+  font: 17px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+.wrap { max-width: var(--maxw); margin: 0 auto; padding: 1.5rem 16px 4rem; }
+header.site { border-bottom: 1px solid var(--rule); margin-bottom: 2rem; padding-bottom: 1rem; }
+header.site .crumb { font-size: .9rem; color: var(--ink-3); margin: 0 0 .25rem; }
+header.site .crumb a { color: var(--ink-3); }
+h1 { font-size: 1.9rem; line-height: 1.2; margin: 0 0 .5rem; letter-spacing: -.01em; }
+h2 { font-size: 1.35rem; margin: 3rem 0 .5rem; line-height: 1.3; }
+h3 { font-size: 1.1rem; margin: 1.75rem 0 .4rem; }
+p { margin: .6rem 0; }
+.lede { font-size: 1.08rem; color: var(--ink-2); max-width: 44rem; }
+.muted { color: var(--ink-3); }
+a { color: var(--accent); }
+:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; border-radius: 3px; }
+.skip { position: absolute; left: -9999px; }
+.skip:focus { left: 1rem; top: 1rem; background: var(--bg); padding: .5rem; z-index: 10; }
+.panel { background: var(--surface); border-radius: 10px; padding: 1rem 1.1rem; margin: 1rem 0; overflow-x: auto; }
+.row { display: flex; flex-wrap: wrap; gap: 1.25rem; align-items: flex-start; }
+.col { flex: 1 1 18rem; min-width: 0; }
+.controls { display: flex; flex-wrap: wrap; gap: .5rem .75rem; align-items: center; margin: .75rem 0; }
+button, select, input[type=number], input[type=text] {
+  font: inherit; font-size: .95rem; color: var(--ink); background: var(--bg);
+  border: 1px solid var(--rule); border-radius: 7px; padding: .35rem .75rem; min-height: 2.25rem;
+}
+button { cursor: pointer; }
+button:hover:not(:disabled) { border-color: var(--ink-3); }
+button:disabled { opacity: .45; cursor: default; }
+button.primary { background: var(--accent); color: var(--bg); border-color: var(--accent); }
+input[type=number] { width: 5.5rem; }
+input[type=range] { accent-color: var(--accent); width: min(18rem, 100%); }
+label { font-size: .95rem; }
+.narr {
+  min-height: 4.5rem; border-left: 3px solid var(--accent); padding: .35rem .9rem; margin: .75rem 0;
+  background: var(--bg); border-radius: 0 6px 6px 0;
+}
+.narr strong { color: var(--ink); }
+.stepcount { font-size: .88rem; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.readout { font-variant-numeric: tabular-nums; }
+.readout dt { color: var(--ink-3); font-size: .88rem; }
+.readout dd { margin: 0 0 .5rem; font-size: 1.05rem; }
+.kv { display: grid; grid-template-columns: minmax(7rem, 48%) minmax(0, 1fr); gap: .15rem 1rem; font-variant-numeric: tabular-nums; }
+.kv > :nth-child(odd) { color: var(--ink-3); }
+.mono, code { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: .92em; }
+.math { font-family: "Cambria Math", "STIX Two Math", "Latin Modern Math", Georgia, serif; font-style: normal; }
+.math i, i.v { font-style: italic; }
+/* matrices */
+.mats { display: flex; flex-wrap: wrap; gap: 1rem 1.5rem; align-items: center; margin: .75rem 0; }
+.matwrap { display: inline-flex; flex-direction: column; align-items: center; gap: .2rem; }
+.matwrap .cap { font-size: .9rem; color: var(--ink-3); }
+table.mat { border-collapse: separate; border-spacing: 2px; position: relative; padding: 0 6px;
+  font-variant-numeric: tabular-nums; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: .92rem; }
+table.mat::before, table.mat::after { content: ""; position: absolute; top: 0; bottom: 0; width: 6px;
+  border: 1.5px solid var(--ink-2); }
+table.mat::before { left: 0; border-right: none; }
+table.mat::after { right: 0; border-left: none; }
+table.mat td { padding: .2rem .5rem; text-align: right; min-width: 3.2rem; border-radius: 4px;
+  transition: background-color .25s; }
+table.mat td.pivot { background: var(--t2); outline: 2px solid var(--s2); }
+table.mat td.hlrow { background: var(--t1); }
+table.mat td.src { background: var(--t4); }
+table.mat td.newL { background: var(--t3); outline: 2px solid var(--s3); }
+table.mat td.zeroed { color: var(--ink-3); }
+table.mat td.dim { color: var(--ink-3); opacity: .55; }
+table.mat td.done { background: var(--t3); }
+.op { font-size: 1.3rem; color: var(--ink-3); }
+/* legend chips */
+.legend { display: flex; flex-wrap: wrap; gap: .4rem 1rem; font-size: .88rem; color: var(--ink-2); margin: .25rem 0; }
+.chip { display: inline-block; width: .9rem; height: .9rem; border-radius: 3px; vertical-align: -2px; margin-right: .3rem; }
+/* svg */
+svg.plot { width: 100%; height: auto; display: block; overflow: visible; }
+svg.plot text { fill: var(--ink-2); font: 12px system-ui, sans-serif; }
+svg.plot .axis { stroke: var(--ink-3); stroke-width: 1; }
+svg.plot .grid { stroke: var(--rule); stroke-width: 1; }
+.fig { margin: .75rem 0; }
+.figcap { font-size: .9rem; color: var(--ink-3); margin-top: .35rem; }
+details { margin: .75rem 0; }
+summary { cursor: pointer; color: var(--accent); }
+.predict { background: var(--t4); border-radius: 8px; padding: .5rem .8rem; margin: .5rem 0; }
+.good { color: var(--s3); font-weight: 600; }
+.bad { color: var(--s2); font-weight: 600; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+nav.toc { font-size: .95rem; }
+nav.toc ol { padding-left: 1.2rem; margin: .25rem 0; }
+footer.site { margin-top: 4rem; padding-top: 1rem; border-top: 1px solid var(--rule); font-size: .88rem; color: var(--ink-3); }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+@media (max-width: 560px) { body { font-size: 16px; } h1 { font-size: 1.55rem; } table.mat td { min-width: 2.4rem; padding: .15rem .3rem; } }
+/* SVD explorers */
+canvas.plane { width: 100%; aspect-ratio: 1 / 1; display: block; touch-action: none; border-radius: 6px; background: var(--bg); }
+canvas.plane:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+.imgs { display: flex; flex-wrap: wrap; gap: 1rem; }
+.imgs figure { margin: 0; flex: 0 1 17rem; min-width: 0; }
+.imgs canvas { width: 100%; height: auto; display: block; border-radius: 4px; background: var(--bg); }
+.imgs figcaption { font-size: .9rem; color: var(--ink-3); margin-top: .3rem; font-variant-numeric: tabular-nums; }
+.seg { display: inline-flex; flex-wrap: wrap; gap: .35rem; }
+button[aria-pressed="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.recipe { display: grid; grid-template-columns: auto 1fr; gap: .3rem 1rem; font-variant-numeric: tabular-nums; font-size: .95rem; }
+.recipe > :nth-child(odd) { color: var(--ink-3); font-size: .88rem; }
+.c1 { color: var(--s1); } .c2 { color: var(--s2); } .c3 { color: var(--s3); }
+table.data { border-collapse: collapse; font-variant-numeric: tabular-nums; font-size: .95rem; margin: .5rem 0; }
+table.data th, table.data td { padding: .25rem .7rem; text-align: right; border-bottom: 1px solid var(--rule); }
+table.data th { color: var(--ink-3); font-weight: 500; }
+table.data th:first-child, table.data td:first-child { text-align: left; }
+
+</style>
+<script>
+/* ---------- shared helpers: numerics, formatting, DOM, SVG, stepper ---------- */
+"use strict";
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
+const el = (tag, attrs = {}, ...kids) => {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (k === "class") e.className = v; else if (k === "html") e.innerHTML = v;
+    else if (k.startsWith("on")) e.addEventListener(k.slice(2), v); else e.setAttribute(k, v);
+  }
+  for (const k of kids) if (k != null) e.append(k.nodeType ? k : document.createTextNode(k));
+  return e;
+};
+const SVGNS = "http://www.w3.org/2000/svg";
+const sv = (tag, attrs = {}, parent) => {
+  const e = document.createElementNS(SVGNS, tag);
+  for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
+  if (parent) parent.appendChild(e);
+  return e;
+};
+const cssVar = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+
+/* number formatting */
+function fmt(x, d = 4) {
+  if (!isFinite(x)) return x > 0 ? "∞" : (x < 0 ? "−∞" : "NaN");
+  if (x === 0) return "0";
+  const a = Math.abs(x);
+  let s;
+  if (a >= 1e5 || a < 1e-3) s = fmtExp(x, d);
+  else { s = (+x.toFixed(d)).toString(); }
+  return s.replace("-", "−");
+}
+function fmtExp(x, d = 3) {
+  if (x === 0) return "0";
+  const e = Math.floor(Math.log10(Math.abs(x)));
+  let m = x / Math.pow(10, e);
+  if (Math.abs(+m.toFixed(d - 1)) >= 10) { m /= 10; return fmtExp(x, d); }
+  return (+m.toFixed(d - 1)).toString().replace("-", "−") + "×10" + sup(e);
+}
+function sup(n) {
+  const m = { "-": "⁻", "0": "⁰", "1": "¹", "2": "²", "3": "³", "4": "⁴", "5": "⁵", "6": "⁶", "7": "⁷", "8": "⁸", "9": "⁹" };
+  return String(n).split("").map(c => m[c] || c).join("");
+}
+function fmtFrac(x) { // nice display for values that are near simple fractions/integers
+  if (Math.abs(x - Math.round(x)) < 1e-12) return String(Math.round(x)).replace("-", "−");
+  return fmt(x, 4);
+}
+
+/* ---------- linear algebra (dense, arrays of arrays) ---------- */
+const LA = {
+  clone: A => A.map(r => r.slice()),
+  eye: n => Array.from({ length: n }, (_, i) => Array.from({ length: n }, (_, j) => +(i === j))),
+  zeros: (m, n) => Array.from({ length: m }, () => new Array(n).fill(0)),
+  T: A => A[0].map((_, j) => A.map(r => r[j])),
+  mul(A, B) {
+    const m = A.length, k = B.length, n = B[0].length, C = LA.zeros(m, n);
+    for (let i = 0; i < m; i++) for (let p = 0; p < k; p++) { const a = A[i][p]; if (a) for (let j = 0; j < n; j++) C[i][j] += a * B[p][j]; }
+    return C;
+  },
+  mv: (A, x) => A.map(r => r.reduce((s, a, j) => s + a * x[j], 0)),
+  dot: (x, y) => x.reduce((s, a, i) => s + a * y[i], 0),
+  norm2: x => Math.hypot(...x),
+  norm1: x => x.reduce((s, a) => s + Math.abs(a), 0),
+  normInf: x => Math.max(...x.map(Math.abs)),
+  sub: (x, y) => x.map((a, i) => a - y[i]),
+  matNorm1: A => Math.max(...A[0].map((_, j) => A.reduce((s, r) => s + Math.abs(r[j]), 0))),
+  matNormInf: A => Math.max(...A.map(r => r.reduce((s, a) => s + Math.abs(a), 0))),
+  /* LU with optional partial pivoting; returns {L,U,perm,swaps} */
+  lu(A0, pivot = true) {
+    const n = A0.length, U = LA.clone(A0), L = LA.eye(n), perm = [...Array(n).keys()];
+    for (let k = 0; k < n - 1; k++) {
+      if (pivot) {
+        let p = k; for (let i = k + 1; i < n; i++) if (Math.abs(U[i][k]) > Math.abs(U[p][k])) p = i;
+        if (p !== k) { [U[k], U[p]] = [U[p], U[k]]; [perm[k], perm[p]] = [perm[p], perm[k]];
+          for (let j = 0; j < k; j++) [L[k][j], L[p][j]] = [L[p][j], L[k][j]]; }
+      }
+      for (let i = k + 1; i < n; i++) {
+        const m = U[i][k] / U[k][k]; L[i][k] = m;
+        for (let j = k; j < n; j++) U[i][j] -= m * U[k][j];
+        U[i][k] = 0;
+      }
+    }
+    return { L, U, perm };
+  },
+  fwd(L, b) { const n = b.length, y = new Array(n); for (let i = 0; i < n; i++) { let s = b[i]; for (let j = 0; j < i; j++) s -= L[i][j] * y[j]; y[i] = s / L[i][i]; } return y; },
+  back(U, y) { const n = y.length, x = new Array(n); for (let i = n - 1; i >= 0; i--) { let s = y[i]; for (let j = i + 1; j < n; j++) s -= U[i][j] * x[j]; x[i] = s / U[i][i]; } return x; },
+  solve(A, b, pivot = true) { const { L, U, perm } = LA.lu(A, pivot); return LA.back(U, LA.fwd(L, perm.map(i => b[i]))); },
+  /* Gauss–Jordan inverse with partial pivoting (the usual textbook inverse) */
+  inv(A0) {
+    const n = A0.length, M = A0.map((r, i) => [...r, ...LA.eye(n)[i]]);
+    for (let k = 0; k < n; k++) {
+      let p = k; for (let i = k + 1; i < n; i++) if (Math.abs(M[i][k]) > Math.abs(M[p][k])) p = i;
+      [M[k], M[p]] = [M[p], M[k]];
+      const d = M[k][k]; for (let j = 0; j < 2 * n; j++) M[k][j] /= d;
+      for (let i = 0; i < n; i++) if (i !== k) { const m = M[i][k]; if (m) for (let j = 0; j < 2 * n; j++) M[i][j] -= m * M[k][j]; }
+    }
+    return M.map(r => r.slice(n));
+  },
+  /* Cholesky solve (for normal equations) */
+  cholSolve(A, b) {
+    const n = A.length, L = LA.zeros(n, n);
+    for (let j = 0; j < n; j++) {
+      let s = A[j][j]; for (let k = 0; k < j; k++) s -= L[j][k] * L[j][k];
+      if (!(s > 0)) return null;
+      L[j][j] = Math.sqrt(s);
+      for (let i = j + 1; i < n; i++) { let t = A[i][j]; for (let k = 0; k < j; k++) t -= L[i][k] * L[j][k]; L[i][j] = t / L[j][j]; }
+    }
+    const y = LA.fwd(L, b); return LA.back(LA.T(L), y);
+  },
+  /* Householder QR least squares: returns x minimising ||Ax-b|| */
+  qrSolve(A0, b0) {
+    const m = A0.length, n = A0[0].length, A = LA.clone(A0), b = b0.slice();
+    for (let k = 0; k < n; k++) {
+      let nr = 0; for (let i = k; i < m; i++) nr += A[i][k] * A[i][k]; nr = Math.sqrt(nr);
+      if (nr === 0) continue;
+      const alpha = A[k][k] > 0 ? -nr : nr, v = new Array(m).fill(0);
+      v[k] = A[k][k] - alpha; for (let i = k + 1; i < m; i++) v[i] = A[i][k];
+      let vv = 0; for (let i = k; i < m; i++) vv += v[i] * v[i];
+      if (vv === 0) continue;
+      for (let j = k; j < n; j++) { let s = 0; for (let i = k; i < m; i++) s += v[i] * A[i][j]; s = 2 * s / vv; for (let i = k; i < m; i++) A[i][j] -= s * v[i]; }
+      let s = 0; for (let i = k; i < m; i++) s += v[i] * b[i]; s = 2 * s / vv; for (let i = k; i < m; i++) b[i] -= s * v[i];
+    }
+    const R = A.slice(0, n).map(r => r.slice(0, n));
+    return LA.back(R, b.slice(0, n));
+  },
+  /* singular values via one-sided Jacobi (accurate for small dense matrices) */
+  svals(A0) {
+    const m = A0.length, n = A0[0].length;
+    let U = A0.map(r => r.slice());
+    if (m < n) U = LA.T(U);
+    const cols = U[0].length, rows = U.length;
+    for (let sweep = 0; sweep < 60; sweep++) {
+      let off = 0;
+      for (let p = 0; p < cols - 1; p++) for (let q = p + 1; q < cols; q++) {
+        let a = 0, b = 0, c = 0;
+        for (let i = 0; i < rows; i++) { a += U[i][p] * U[i][p]; b += U[i][q] * U[i][q]; c += U[i][p] * U[i][q]; }
+        if (Math.abs(c) <= 1e-15 * Math.sqrt(a * b)) continue;
+        off = Math.max(off, Math.abs(c) / Math.sqrt(a * b));
+        const z = (b - a) / (2 * c), t = Math.sign(z || 1) / (Math.abs(z) + Math.sqrt(1 + z * z));
+        const cs = 1 / Math.sqrt(1 + t * t), sn = cs * t;
+        for (let i = 0; i < rows; i++) { const up = U[i][p], uq = U[i][q]; U[i][p] = cs * up - sn * uq; U[i][q] = sn * up + cs * uq; }
+      }
+      if (off < 1e-15) break;
+    }
+    const s = []; for (let j = 0; j < cols; j++) { let t = 0; for (let i = 0; i < rows; i++) t += U[i][j] * U[i][j]; s.push(Math.sqrt(t)); }
+    return s.sort((a, b) => b - a);
+  },
+  cond2(A) { const s = LA.svals(A); return s[0] / s[s.length - 1]; },
+};
+
+/* seeded PRNG so every student sees the same "random" numbers */
+function mulberry32(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+
+/* ---------- matrix rendering ---------- */
+/* cls(i,j) -> class name; fmtf(v,i,j) -> string */
+function matTable(M, { label = "matrix", cls = () => "", fmtf = v => fmtFrac(v), cap = null } = {}) {
+  const t = el("table", { class: "mat", "aria-label": `${label}, ${M.length} by ${M[0].length}` });
+  const tb = el("tbody"); t.append(tb);
+  M.forEach((r, i) => { const tr = el("tr"); r.forEach((v, j) => { const c = cls(i, j); tr.append(el("td", c ? { class: c } : {}, fmtf(v, i, j))); }); tb.append(tr); });
+  const w = el("div", { class: "matwrap" }, t);
+  if (cap) w.append(el("div", { class: "cap", html: cap }));
+  return w;
+}
+const colVec = x => x.map(v => [v]);
+
+/* ---------- linear scale + axes ---------- */
+function scale(d0, d1, r0, r1, log = false) {
+  if (log) { const a = Math.log10(d0), b = Math.log10(d1); const f = v => r0 + (Math.log10(v) - a) / (b - a) * (r1 - r0); f.inv = p => Math.pow(10, a + (p - r0) / (r1 - r0) * (b - a)); return f; }
+  const f = v => r0 + (v - d0) / (d1 - d0) * (r1 - r0); f.inv = p => d0 + (p - r0) / (r1 - r0) * (d1 - d0); return f;
+}
+function niceTicks(a, b, n = 6) {
+  const span = b - a, step0 = span / n, mag = Math.pow(10, Math.floor(Math.log10(step0)));
+  const step = [1, 2, 2.5, 5, 10].map(s => s * mag).find(s => span / s <= n) || 10 * mag;
+  const out = []; for (let v = Math.ceil(a / step) * step; v <= b + 1e-9 * step; v += step) out.push(+v.toFixed(10));
+  return out;
+}
+/* axes(svg, X, Y, {xt, yt, xlab, ylab, W, H, pad, log flags}) */
+function drawAxes(g, X, Y, o) {
+  const { x0, x1, y0, y1 } = o;
+  const xt = o.xt || niceTicks(o.xd[0], o.xd[1]), yt = o.yt || niceTicks(o.yd[0], o.yd[1]);
+  for (const t of yt) { sv("line", { x1: x0, x2: x1, y1: Y(t), y2: Y(t), class: "grid" }, g);
+    sv("text", { x: x0 - 6, y: Y(t) + 4, "text-anchor": "end" }, g).textContent = o.yfmt ? o.yfmt(t) : fmt(t, 3); }
+  for (const t of xt) { sv("line", { x1: X(t), x2: X(t), y1: y0, y2: y0 + 4, class: "axis" }, g);
+    sv("text", { x: X(t), y: y0 + 17, "text-anchor": "middle" }, g).textContent = o.xfmt ? o.xfmt(t) : fmt(t, 3); }
+  sv("line", { x1: x0, x2: x1, y1: y0, y2: y0, class: "axis" }, g);
+  sv("line", { x1: x0, x2: x0, y1: y0, y2: y1, class: "axis" }, g);
+  if (o.xlab) sv("text", { x: (x0 + x1) / 2, y: y0 + 36, "text-anchor": "middle" }, g).textContent = o.xlab;
+  if (o.ylab) { const t = sv("text", { x: 0, y: 0, "text-anchor": "middle", transform: `translate(${x0 - 46},${(y0 + y1) / 2}) rotate(-90)` }, g); t.textContent = o.ylab; }
+}
+
+/* ---------- stepper: prev / next / reset with aria-live narration ---------- */
+class Stepper {
+  constructor(root, { onRender, total, labels = {} }) {
+    this.i = 0; this.onRender = onRender; this.total = total;
+    this.prev = el("button", { type: "button", onclick: () => this.go(this.i - 1) }, labels.prev || "◀ Back");
+    this.next = el("button", { type: "button", class: "primary", onclick: () => this.go(this.i + 1) }, labels.next || "Next ▶");
+    this.reset = el("button", { type: "button", onclick: () => this.go(0) }, "Start over");
+    this.count = el("span", { class: "stepcount", "aria-hidden": "true" });
+    root.append(this.prev, this.next, this.reset, this.count);
+  }
+  setTotal(n) { this.total = n; this.go(Math.min(this.i, n - 1)); }
+  go(i) {
+    this.i = Math.max(0, Math.min(this.total - 1, i));
+    this.prev.disabled = this.i === 0; this.next.disabled = this.i === this.total - 1;
+    this.count.textContent = `Step ${this.i + 1} of ${this.total}`;
+    this.onRender(this.i);
+  }
+}
+
+/* announce helper for sliders etc. (debounced) */
+function makeAnnouncer(node) { let t; return msg => { clearTimeout(t); t = setTimeout(() => { node.textContent = msg; }, 350); }; }
+
+/* ---------- full SVD by one-sided Jacobi (Hestenes) ----------
+   svd(A) for an m x n array-of-rows. Returns {s, U, V}: s sorted descending,
+   U = array of r column vectors (length m), V = array of r column vectors (length n), r = min(m, n). */
+LA.svd = function (A0) {
+  let m = A0.length, n = A0[0].length, tr = false, get = (i, j) => A0[i][j];
+  if (m < n) { tr = true; [m, n] = [n, m]; get = (i, j) => A0[j][i]; }
+  const C = Array.from({ length: n }, (_, j) => { const c = new Float64Array(m); for (let i = 0; i < m; i++) c[i] = get(i, j); return c; });
+  const V = Array.from({ length: n }, (_, j) => { const v = new Float64Array(n); v[j] = 1; return v; });
+  for (let sweep = 0; sweep < 40; sweep++) {
+    let off = 0;
+    for (let p = 0; p < n - 1; p++) for (let q = p + 1; q < n; q++) {
+      const cp = C[p], cq = C[q];
+      let a = 0, b = 0, c = 0;
+      for (let i = 0; i < m; i++) { const x = cp[i], y = cq[i]; a += x * x; b += y * y; c += x * y; }
+      if (c === 0 || Math.abs(c) <= 1e-15 * Math.sqrt(a * b)) continue;
+      off = Math.max(off, Math.abs(c) / Math.sqrt(a * b));
+      const z = (b - a) / (2 * c), t = Math.sign(z || 1) / (Math.abs(z) + Math.sqrt(1 + z * z));
+      const cs = 1 / Math.sqrt(1 + t * t), sn = cs * t;
+      for (let i = 0; i < m; i++) { const x = cp[i], y = cq[i]; cp[i] = cs * x - sn * y; cq[i] = sn * x + cs * y; }
+      const vp = V[p], vq = V[q];
+      for (let i = 0; i < n; i++) { const x = vp[i], y = vq[i]; vp[i] = cs * x - sn * y; vq[i] = sn * x + cs * y; }
+    }
+    if (off < 1e-14) break;
+  }
+  const norms = C.map(c => Math.sqrt(c.reduce((s, x) => s + x * x, 0)));
+  const order = [...norms.keys()].sort((i, j) => norms[j] - norms[i]);
+  const s = order.map(j => norms[j]);
+  const Uc = order.map(j => { const c = C[j], d = norms[j]; return d > 0 ? c.map(x => x / d) : c.map(() => 0); });
+  const Vc = order.map(j => V[j]);
+  return tr ? { s, U: Vc, V: Uc } : { s, U: Uc, V: Vc };
+};
+/* flip signs so each v_i has a positive first nonzero entry (u_i flips with it) */
+LA.svdTidy = function (S) {
+  S.V.forEach((v, i) => { const k = v.findIndex(x => Math.abs(x) > 1e-12); if (k >= 0 && v[k] < 0) { S.V[i] = v.map(x => -x); S.U[i] = S.U[i].map(x => -x); } });
+  return S;
+};
+/* standard normal from a uniform PRNG (Box–Muller) */
+function gauss(rand) { let u = 0; while (u === 0) u = rand(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * rand()); }
+
+</script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<div class="wrap">
+<header class="site"><p class="crumb"><a href="index.html">The SVD &mdash; explorers</a></p><p class="crumb">MATH/CCM 472/572 &middot; The Singular Value Decomposition</p></header>
+<main id="main">
+<!-- title: Layers of a Picture -->
+<!-- desc: Compress an image by keeping its first k SVD layers, and check the Eckart-Young error prediction against the pixels. -->
+<h1>Layers of a picture</h1>
+<p class="lede">A grayscale image is a matrix. Its SVD splits it into rank-one layers, largest first, and Eckart&ndash;Young says the first <i>k</i> layers are the best rank-<i>k</i> image there is. Slide <i>k</i> and watch the picture come back, and check that the singular values predict the error before you look.</p>
+
+<nav class="toc panel" aria-label="On this page"><ol>
+  <li><a href="#explore">Keep the first <i>k</i> layers</a></li>
+  <li><a href="#predict">Predicting the error</a></li>
+  <li><a href="#try">Things to try</a></li>
+</ol></nav>
+
+<h2 id="explore">Keep the first <i>k</i> layers</h2>
+<div class="panel">
+  <div class="controls seg" role="group" aria-label="Choose an image" id="pick">
+    <button type="button" data-img="photo">Photograph</button>
+    <button type="button" data-img="plaid">Plaid</button>
+    <button type="button" data-img="straight">Straight stripes</button>
+    <button type="button" data-img="diag">Diagonal stripes</button>
+    <label style="margin-left:.5rem">Your own image: <input type="file" id="file" accept="image/*"></label>
+  </div>
+  <p class="muted" style="margin:.2rem 0 .6rem;font-size:.88rem">Your image stays on your computer: it is shrunk to about 150 pixels on its longer side and processed in this page.</p>
+  <div class="controls">
+    <label for="k">Layers kept: <i>k</i> = <strong id="kv"></strong> of <span id="rmax"></span></label>
+    <input type="range" id="k" min="1" max="128" step="1" value="10">
+    <button type="button" id="kminus" aria-label="One fewer layer">&minus;1</button><button type="button" id="kplus" aria-label="One more layer">+1</button>
+  </div>
+  <div class="controls seg" role="group" aria-label="What the right-hand picture shows" id="view">
+    <button type="button" data-v="sum" aria-pressed="true">First <i>k</i> layers, <i>A<sub>k</sub></i></button>
+    <button type="button" data-v="layer">Layer <i>k</i> alone</button>
+    <button type="button" data-v="err">Error, <i>A</i> &minus; <i>A<sub>k</sub></i></button>
+  </div>
+</div>
+<div class="imgs">
+  <figure><canvas id="orig" role="img" aria-label="The original image"></canvas><figcaption id="origcap">Original</figcaption></figure>
+  <figure><canvas id="appr" role="img" aria-label="The approximation"></canvas><figcaption id="apprcap"></figcaption></figure>
+</div>
+<div class="row" style="margin-top:1rem">
+  <div class="col"><dl class="kv readout" id="read" aria-live="polite"></dl></div>
+  <div class="col" style="flex-basis:22rem">
+    <svg id="splot" class="plot" viewBox="0 0 420 230" role="img" aria-label="Singular values on a log scale, with the kept ones highlighted"></svg>
+    <p class="figcap">Singular values, largest first (log scale). <span class="c1">Blue</span>: the layers kept. Gray: the layers thrown away. By Eckart&ndash;Young, the gray ones are the error.</p>
+  </div>
+</div>
+
+<h2 id="predict">Predicting the error</h2>
+<p>By Eckart&ndash;Young, the relative Frobenius error of <i>A<sub>k</sub></i> depends only on the singular values you throw away:</p>
+<p class="math" style="text-align:center;font-size:1.08rem">&#8214;<i>A</i> &minus; <i>A<sub>k</sub></i>&#8214;<sub>F</sub> / &#8214;<i>A</i>&#8214;<sub>F</sub> &nbsp;=&nbsp; square root of &nbsp;(&sigma;<sub><i>k</i>+1</sub><sup>2</sup> + &sigma;<sub><i>k</i>+2</sub><sup>2</sup> + &middot;&middot;&middot;) / (&sigma;<sub>1</sub><sup>2</sup> + &sigma;<sub>2</sub><sup>2</sup> + &middot;&middot;&middot;).</p>
+<p>The readout shows this prediction next to the error measured pixel by pixel. Use the prediction to answer the question a compression program has to answer: how few layers can I keep?</p>
+<div class="controls">
+  <button type="button" data-tol="0.1" class="tol">Fewest layers for 10% error</button>
+  <button type="button" data-tol="0.05" class="tol">Fewest layers for 5% error</button>
+  <button type="button" data-tol="0.02" class="tol">Fewest layers for 2% error</button>
+</div>
+<p class="narr" id="tolnote" aria-live="polite">Pick a target and the slider jumps to the answer, found from the singular values alone.</p>
+
+<h2 id="try">Things to try</h2>
+<ul>
+  <li><strong>Plaid.</strong> Before you move the slider: how many layers does it need? (It is a horizontal pattern plus a vertical one.) What happens to the singular values after that?</li>
+  <li><strong>Straight vs. diagonal stripes.</strong> Same stripes, turned 45&deg;. Why does the diagonal version need so many more layers? Look at &ldquo;layer <i>k</i> alone&rdquo;: every layer is a column pattern times a row pattern.</li>
+  <li><strong>The photograph.</strong> Find the smallest <i>k</i> you would call recognizable. What does that cost in storage?</li>
+  <li><strong>The error picture.</strong> Where in the photograph is the error concentrated at <i>k</i> = 10? Why there?</li>
+</ul>
+
+<script>
+(() => {
+  const PHOTO = "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BxkaFxYWFRMVFRgRHtT8+l0LGRQWFBMSFRUTFRQWEhMYGBkZFxwYFRcWGBcZGBYWFRYVExQSDw4QEQ8RExEOEAg2loy2trGjvoESFhMQDw8QDQ8REA8ODQ0ODw8ODg4ODw0PDQ4LDA0NDQwODA4NDg4NDA4NDxALNdn69P/TIAoaExUUFRUUExMTERgLNPPPFhUTFBMVExQWFBUVFRQTFRoXGRwUFhcVExQWFBUWFhQSFxIVFQ8PDxASERURDxAPDxKGkrW0samxmDISEhATEhEQDRIQDA8OEA0PEhANDRIRDg0LDQ0ODQ0ODQwMCgsMDQwODA0ODxISp/r/1ycKFxITExIRExMUEhQSEBYCcmYHGBYVFRcVFBQXFRcVExQUGxsZGxgYFRYVExQXFRMSGRYXFRMTEhIREhQODxEPDw8SBlKctbWvqayXWBAODhAOEA0PEg8PDgwQDA8QDg4OEAwODQwMDg0NDg8NDAwODAoODgwNDA0PFwlg/9wmCRUPDg0NEA8OFBYREhQTExUPFRcVFhQUEhYWFRcXFhYXFxYUFhgaGRYVFRcUFhYSFBQYFxYTExMWFRAREA8SDQwPEA8NJ5K0trClpphvEQwNDQ0ODw4MDw8ODBAPEA8ODw4MDRAQDw4MDgwMDAwMCw4OCwwNDA0ODw8UDi3IOAUTDg4PERARDw8UFBQXGBUUExkXFhcaFBEUFxYUExYVFRUXFxgWGBoWFBUUEhMWFBMWFBQWFBITFRQTEhESEBEPEA4PDg4NdbW2sailm3ETDQ4MCw4MDg4PEA0PDw8OEA8NDQ8NDhAMDgwMDQ4PCw4MDQ8OCw0PDA4PExEQHigIFBAODxISCwcDAgcICAoHEhcVFBcTFRcWFRYVExYUExYWFxgYGhgZFBgZFhQTFRMSEREVFBISFBITExASEA8RERAQDg8REgZJtLSwq6eccBEODwwMDgwNDw4PDg0MDQ4ODQ0PDw0QDg0NDg0PDgsLDgwMDQ0NCw0NDg0RERYWCxAQDg4VEw0nOURVYWJcY2MUERYUExUWFBQYFxcWFBMSFBYVFhgYFxQXGRcYGRQXExEREBQXFhcUExMPEhMQDhAODRIQDw8PDB2ztbKrpZxxDg4NDg8ODg4QDA4NDg4MDA8OEQ8ODA0MDhAODg4ODQ0LDQ4QDA4LDw0MDg8TFRgUEBMPEBEQGZvZ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FRQTFBQYFxodHhscGRocGxsdGxsdHhsaFxkbGhUXFhYVFhQTEQ4NEA8TEhEPEBATEhQRFKilp5UlCg8ODg0MDA0NDgsNDA0PDgwNDxAPDw8QDxARDg4QDA4ODRAOEA8PCwsLCwwODA0REQ4OEhITEw4PDw0OEhIUFRMXGBgTEhQQEhQUFRgXGBcVGBkWGBgZFxcZHBsXGBYWGBQVFRQUEhMUFxMPDhAQERERERISDxESERAStK6aiiALDg0MCwwLDg0NDA0NDw8ODQsODw4QEBEQDw0KDQ8OIA4ODwsNEA4ODAwPDA4ODQ0NDg8RExUTEBAQDhETEhMWFxUWFRYUEhESFBMVFxUTFxYWFxcXFxgYGRgYFxkZFxcWFRUVFRYVFBQVExANDBAPDRESEBAREA8ODhCLrJiIHQ0QDgsLDQ4NEAwJDg0ODgwNDQ8PEQ4OEg8MDxAMDQ8RDgwPDQ0PDA4LDQwLDQ4QDQsNDQ8VFBUVDg8NDRESERMVFRUSERUVFBUUFBUXFhYXFRgYFxwYGBoZGRkbGhgZFxcXFxcYFxgYFhUVEA4RDxAPEA4OEA8SEA0ODkecpIsXDQ4ODgwMCw0PDgwNDw4PDw4OEAwOEA4QEg8QDw4ODQ4ODgwLDQ0NDg0NDg0NDg8NDg0NDhESFBEPDQ0NDw0SEREQEhESERQUFBMTFhgVFBYXFxkXGRcZGBoWGRkaFhcVFRgUFRUUFBQVFRcSDQ4PDhAPEBEPEQ4QDg0NOVagiw4ODgwNDg4LDQ8ODAwNDAwODg4PDQ0SDg4MDA4PDRAPDgwODA0PDgwODQ4NDQ0MDQsNDQsMDQ4RDhAPDQ0MDg4LDA4ODQ4RFRUWERISExUTFBYWFBYUFRYWGRgWFhYVFhUWFRMSFBMSFBYUFREMDQwNDAwLDQ4NDwsOCw0/M26RDw4NDQwODw4NDQwMDQ0NDQwODg4ODw8ODg4MCw8QDQ8ODQ8NDgwQDwwNDgwMDQ4QDgsNDAwLDA0ODg0NDw4PDAsMDA4QDg8TFRQSDxAVExQXFRUXFxcXGRsaHBoYGBgWGBgZFRgXExUVFRUUDw8ODQ4LDQwNDg0OEAsKDDw4QFALDw4PDQwNDQ0OCw0NDg0NDw8ODRAODAwODhANDg8ODQ4ODg4NDQ8ODQwNDQwODA0PDg4ODQsLDA0ODw0PDAsMCw0PEA4QExUTExMREhQWFhgWFhYYGBcaGRkZFxgZFBgUFhgUFxUVGBUUExEPCwwMDQ8ODQsODA8MDQ0NPDk+LA0MDQ4QDg0MDQ0NDQ4NDg4NDQ8PEBANDw8OERAPDgwPDQ8PDg8PEA4NDA0NDQ4MDQwODg4MCgwNDQ0MDxANCw0NDQ4QDRAVExUUFRQTFBQWFhYVFhcYFhkXFhgZGBgYGRgSExUVFBQTFRUTEQsLDQsLDAwNDQ0PDAoLDg08OTwnCwwMDQ4ODg0LCgoMDQwMDg0NDxAQDQ4QDg4PDxAPDQ8ODQ4QEA4MDQwPDQoNDg0NDgwMDQwNCw4NCw0NDwsNDQwMEBARExMWFBQVFRYWFRUVFRcXGBwYGBgaFxgXHRsZFBQUExUTERASERIRDA0LDQ4NDQ0NDA8NDg0NCzo3OiENDw0PDw4PDAwLDA0ODAsMDgwMDA0MDQwPDgwODg8ODg0PDA0ODA4MDQ0ODQ0ODwwNDQ0LDA0NBgUGAgsODA0OERITFBQUFBQVFhYVFBMUFBcXGRcYGRcWFxoYFxkZGBgVFRMRFBMTEA4ODhMMDQ8NDg4MDQ4LDQ4MDAwMOjc5HgwQDQ0MDQ0ODQsMDw8LDAsODAwOEQ8PDQ4ODA4ODg0MDQwNDQ0PDQ4PDg4NDQ4MDA0NDgsMDgc4pqZQEQsPDA0RExQVFRUUFRUXFBYUFBQUFRcWFxcZGRkZGBgaFhYXFRYUFBUVExAQERAOEgwLDxAMDRIUDAoNDQ0NDA05NzgbDxEODw0ODQ4OCwwNDQwNDQsMDA0MDhAPDw4NDg4NDQ0ODQ4PDxANDAwODQwMDQ4MDg8PDg4GJ7bS1LVcCQ4MDhARFhQVFhIUFRYWFRETFBUWFxQZGBkZGRgZFxgXFhUWFBIVExISEhAOEA0NCwwNDAwOFRAODA4PDRENDTc3NxYNDw4QDg8NDQ4ODA0NCgsNCwsNDQ0MDw8PDw0ODQ0PDQ8ODhASEA0NDA8ODA0NDQ0NDAwNEAVehK/ikYAtCBIPERQUFRcWFRMUExMSDg8SFBYVFhUTFhYTExUSERIUEhEQDxEQDg8NDg4NDAsKDBANDAsMDQ8NDQwMEA0NOzkxDw0PDA0ODQwNEA8PDA4LDAwMDAsNDQsNDQ4MDxAMDg4LDg8ODxERDw4ODA4MDQ0MDQwQDw0NB0dbdY1qb1sFEhITFxQTFBQYFhYTFRMPERMSExUVEhMVFxESFBUTExQSDw8ODw4NDg0ODAwMDQ8NDQ0ODg0NCwwLCw0ODgw6Oy0NDg0MDA0NDwwMDg8MDQ0NDg0MCwwNDA0NDQ0PDg0LDA0MDQ4OEQ8ODQ0NDg0PFQ8MDg8ODg8HKnBUNn6EUgwUExMVFBMWFhQUEhQTERASExMTFRcWFhcUFhQVFRMVFRQREQ4SDw0ODAsMDA0MDQsLDA0ODQ8PDgsNDAwMDTs6KA4PDg4QDwwNDQwNDA0ODAsODg4MDAwODAoNDQ4PDQ0ODA4ODQ8NDg0PDQwNEQ8NEQ0NDw8ODgoQR2FeYE4cEhEQERMSFRUUExIPEg8UExISFhcVFBUVFBMUEhMREhIUEhISEBAQEAwMDA0NDQwNDQ0NDw8MERISDQ8NDQ0O", PW = 128, PH = 150;
+  let img = null, S = null, name = "photo", view = "sum";
+  const kIn = $("#k");
+  function fromBytes(bytes, w, h) { const a = new Float64Array(w * h); for (let i = 0; i < w * h; i++) a[i] = bytes[i] / 255; return { w, h, a }; }
+  function synth(kind) {
+    const w = PW, h = PH, a = new Float64Array(w * h);
+    for (let i = 0; i < h; i++) for (let j = 0; j < w; j++) {
+      let v;
+      if (kind === "plaid") v = 0.5 * (Math.sin(6 * Math.PI * i / h) > 0) + 0.5 * (Math.sin(4 * Math.PI * j / w) > 0);
+      else if (kind === "straight") v = +(Math.floor(i / 10) % 2 === 0);
+      else v = +(Math.floor((i + j) / 10) % 2 === 0);
+      a[i * w + j] = v;
+    }
+    return { w, h, a };
+  }
+  function computeSVD() {
+    const rows = []; for (let i = 0; i < img.h; i++) rows.push(Array.from(img.a.subarray(i * img.w, (i + 1) * img.w)));
+    S = LA.svd(rows);
+    const r = S.s.length; kIn.max = r; $("#rmax").textContent = r;
+    img.normF = Math.sqrt(img.a.reduce((s, x) => s + x * x, 0));
+    img.tail = new Float64Array(r + 1); for (let i = r - 1; i >= 0; i--) img.tail[i] = img.tail[i + 1] + S.s[i] * S.s[i];
+    if (+kIn.value > r) kIn.value = r;
+  }
+  function paint(cv, w, h, val) {
+    cv.width = w; cv.height = h; const ctx = cv.getContext("2d"), id = ctx.createImageData(w, h);
+    for (let p = 0; p < w * h; p++) { const g = Math.max(0, Math.min(255, Math.round(255 * val(p)))); id.data[4 * p] = id.data[4 * p + 1] = id.data[4 * p + 2] = g; id.data[4 * p + 3] = 255; }
+    ctx.putImageData(id, 0, 0);
+  }
+  function approx(k, only) {
+    const { w, h } = img, out = new Float64Array(w * h), i0 = only ? k - 1 : 0;
+    for (let l = i0; l < k; l++) { const s = S.s[l], u = S.U[l], v = S.V[l];
+      for (let i = 0; i < h; i++) { const su = s * u[i]; if (su === 0) continue; const o = i * w; for (let j = 0; j < w; j++) out[o + j] += su * v[j]; } }
+    return out;
+  }
+  function render() {
+    const k = +kIn.value, { w, h, a } = img;
+    $("#kv").textContent = k;
+    paint($("#orig"), w, h, p => a[p]);
+    const Ak = approx(k, false);
+    let err2 = 0; for (let p = 0; p < w * h; p++) { const d = a[p] - Ak[p]; err2 += d * d; }
+    const meas = Math.sqrt(err2) / img.normF, pred = Math.sqrt(img.tail[k] / img.tail[0]);
+    const store = k * (w + h + 1) / (w * h);
+    if (view === "sum") { paint($("#appr"), w, h, p => Ak[p]); $("#apprcap").innerHTML = `<i>A</i><sub>${k}</sub>: the first ${k} layer${k > 1 ? "s" : ""}`; }
+    else if (view === "layer") { const L = approx(k, true); let mx = 1e-300; for (const x of L) mx = Math.max(mx, Math.abs(x));
+      paint($("#appr"), w, h, p => 0.5 + 0.5 * L[p] / mx); $("#apprcap").innerHTML = `Layer ${k} alone, σ<sub>${k}</sub><i>u</i><sub>${k}</sub><i>v</i><sub>${k}</sub><sup>T</sup> (gray = 0, rescaled to show its pattern)`; }
+    else { paint($("#appr"), w, h, p => 0.5 + 2 * (a[p] - Ak[p])); $("#apprcap").innerHTML = `Error <i>A</i> − <i>A</i><sub>${k}</sub> (gray = no error; contrast ×2)`; }
+    $("#appr").setAttribute("aria-label", $("#apprcap").textContent);
+    const r = S.s.length, s2 = k < r ? S.s[k] : 0;
+    $("#read").innerHTML = `<dt>layers kept, <i>k</i></dt><dd>${k}</dd>
+      <dt>storage, <i>k</i>(<i>m</i>+<i>n</i>+1) / <i>mn</i></dt><dd>${(100 * store).toFixed(1)}%</dd>
+      <dt>relative error, predicted from σ</dt><dd><strong>${(100 * pred).toFixed(2)}%</strong></dd>
+      <dt>relative error, measured on the pixels</dt><dd><strong>${(100 * meas).toFixed(2)}%</strong></dd>
+      <dt>2-norm error ‖<i>A</i> − <i>A<sub>k</sub></i>‖<sub>2</sub> = σ<sub><i>k</i>+1</sub></dt><dd>${fmt(s2, 4)}</dd>`;
+    drawS(k);
+  }
+  function drawS(k) {
+    const g = $("#splot"); g.innerHTML = ""; const r = S.s.length, s1 = S.s[0], lo = s1 * 1e-6;
+    const X = scale(1, Math.max(r, 2), 52, 410), Y = scale(lo, s1 * 1.5, 190, 10, true);
+    const yt = []; for (let e = Math.ceil(Math.log10(lo)); e <= Math.log10(s1 * 1.5); e++) yt.push(Math.pow(10, e));
+    drawAxes(g, X, Y, { x0: 52, x1: 410, y0: 190, y1: 10, xd: [1, r], yt, yfmt: t => "10" + sup(Math.round(Math.log10(t))), xlab: "index i" });
+    for (let i = 0; i < r; i++) { const v = Math.max(S.s[i], lo); sv("circle", { cx: X(i + 1), cy: Y(v), r: r > 60 ? 2 : 3, fill: i < k ? "var(--s1)" : "var(--ink-3)", opacity: i < k ? 1 : .6 }, g); }
+    sv("line", { x1: X(k + 0.5), x2: X(k + 0.5), y1: 190, y2: 10, stroke: "var(--s2)", "stroke-width": 1.5, "stroke-dasharray": "4 3" }, g);
+    sv("text", { x: Math.min(X(k + 0.5) + 4, 360), y: 22, fill: "var(--s2)" }, g).textContent = "k = " + k;
+  }
+  function load(kind) {
+    name = kind; $$("#pick button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.img === kind)));
+    if (kind === "photo") img = fromBytes(Uint8Array.from(atob(PHOTO), c => c.charCodeAt(0)), PW, PH);
+    else if (kind !== "own") img = synth(kind);
+    $("#origcap").textContent = `Original, ${img.h} × ${img.w} pixels (${img.h * img.w} numbers)`;
+    computeSVD(); render();
+  }
+  $("#file").addEventListener("change", e => {
+    const fl = e.target.files[0]; if (!fl) return; const url = URL.createObjectURL(fl), im = new Image();
+    im.onload = () => { const sc = 150 / Math.max(im.width, im.height), w = Math.max(8, Math.round(im.width * sc)), h = Math.max(8, Math.round(im.height * sc));
+      const c = document.createElement("canvas"); c.width = w; c.height = h; const ctx = c.getContext("2d"); ctx.drawImage(im, 0, 0, w, h);
+      const d = ctx.getImageData(0, 0, w, h).data, bytes = new Uint8Array(w * h);
+      for (let p = 0; p < w * h; p++) bytes[p] = Math.round(0.299 * d[4 * p] + 0.587 * d[4 * p + 1] + 0.114 * d[4 * p + 2]);
+      img = fromBytes(bytes, w, h); URL.revokeObjectURL(url); load("own"); };
+    im.src = url;
+  });
+  $$("#pick button").forEach(b => b.addEventListener("click", () => load(b.dataset.img)));
+  $$("#view button").forEach(b => b.addEventListener("click", () => { view = b.dataset.v; $$("#view button").forEach(x => x.setAttribute("aria-pressed", String(x === b))); render(); }));
+  kIn.addEventListener("input", render);
+  $("#kminus").addEventListener("click", () => { kIn.value = +kIn.value - 1; render(); });
+  $("#kplus").addEventListener("click", () => { kIn.value = +kIn.value + 1; render(); });
+  $$(".tol").forEach(b => b.addEventListener("click", () => {
+    const tol = +b.dataset.tol, r = S.s.length; let k = 1; while (k < r && Math.sqrt(img.tail[k] / img.tail[0]) > tol) k++;
+    kIn.value = k; render();
+    $("#tolnote").innerHTML = `For at most ${100 * tol}% error, keep <strong>k = ${k}</strong> layer${k > 1 ? "s" : ""}: ${(100 * k * (img.w + img.h + 1) / (img.w * img.h)).toFixed(1)}% of the storage. The prediction came from the singular values alone; the measured error is in the readout.`;
+  }));
+  load("photo");
+})();
+</script>
+
+</main>
+<footer class="site">Interactive companion to the course notes. Every number on this page is computed live in your browser in IEEE double precision &mdash; the same arithmetic NumPy uses.</footer>
+</div>
+</body>
+</html>

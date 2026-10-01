@@ -1,0 +1,686 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Circle to Ellipse</title>
+<meta name="description" content="Drag a vector around the unit circle and watch A = U Sigma V^T turn the circle into an ellipse, one stage at a time.">
+<style>
+:root {
+  color-scheme: light;
+  --bg: #fcfcfb;
+  --surface: #f3f2ef;
+  --ink: #111110;
+  --ink-2: #4a4946;
+  --ink-3: #6b6a66;
+  --rule: #d9d7d1;
+  --accent: #1f64b8;
+  --s1: #2a78d6;      /* blue: active row / series 1 */
+  --s2: #c9501f;      /* orange: pivot / series 2 */
+  --s3: #13875e;      /* aqua-green: L entries / series 3 */
+  --t1: #dbe8f8;      /* tints for cell highlights */
+  --t2: #fbe1d4;
+  --t3: #d5efe3;
+  --t4: #f5ecc8;
+  --focus: #1f64b8;
+  --maxw: 60rem;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #1a1a19;
+    --surface: #242422;
+    --ink: #f4f3ef;
+    --ink-2: #c3c2b7;
+    --ink-3: #a3a29a;
+    --rule: #3d3c39;
+    --accent: #7fb2f0;
+    --s1: #5a9cec;
+    --s2: #f08a5d;
+    --s3: #3cc392;
+    --t1: #1e3450;
+    --t2: #4a2a1b;
+    --t3: #173d2f;
+    --t4: #423a17;
+    --focus: #7fb2f0;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #1a1a19; --surface: #242422; --ink: #f4f3ef; --ink-2: #c3c2b7; --ink-3: #a3a29a;
+  --rule: #3d3c39; --accent: #7fb2f0; --s1: #5a9cec; --s2: #f08a5d; --s3: #3cc392;
+  --t1: #1e3450; --t2: #4a2a1b; --t3: #173d2f; --t4: #423a17; --focus: #7fb2f0;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html { background: var(--bg); }
+body {
+  margin: 0; background: var(--bg); color: var(--ink);
+  font: 17px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+.wrap { max-width: var(--maxw); margin: 0 auto; padding: 1.5rem 16px 4rem; }
+header.site { border-bottom: 1px solid var(--rule); margin-bottom: 2rem; padding-bottom: 1rem; }
+header.site .crumb { font-size: .9rem; color: var(--ink-3); margin: 0 0 .25rem; }
+header.site .crumb a { color: var(--ink-3); }
+h1 { font-size: 1.9rem; line-height: 1.2; margin: 0 0 .5rem; letter-spacing: -.01em; }
+h2 { font-size: 1.35rem; margin: 3rem 0 .5rem; line-height: 1.3; }
+h3 { font-size: 1.1rem; margin: 1.75rem 0 .4rem; }
+p { margin: .6rem 0; }
+.lede { font-size: 1.08rem; color: var(--ink-2); max-width: 44rem; }
+.muted { color: var(--ink-3); }
+a { color: var(--accent); }
+:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; border-radius: 3px; }
+.skip { position: absolute; left: -9999px; }
+.skip:focus { left: 1rem; top: 1rem; background: var(--bg); padding: .5rem; z-index: 10; }
+.panel { background: var(--surface); border-radius: 10px; padding: 1rem 1.1rem; margin: 1rem 0; overflow-x: auto; }
+.row { display: flex; flex-wrap: wrap; gap: 1.25rem; align-items: flex-start; }
+.col { flex: 1 1 18rem; min-width: 0; }
+.controls { display: flex; flex-wrap: wrap; gap: .5rem .75rem; align-items: center; margin: .75rem 0; }
+button, select, input[type=number], input[type=text] {
+  font: inherit; font-size: .95rem; color: var(--ink); background: var(--bg);
+  border: 1px solid var(--rule); border-radius: 7px; padding: .35rem .75rem; min-height: 2.25rem;
+}
+button { cursor: pointer; }
+button:hover:not(:disabled) { border-color: var(--ink-3); }
+button:disabled { opacity: .45; cursor: default; }
+button.primary { background: var(--accent); color: var(--bg); border-color: var(--accent); }
+input[type=number] { width: 5.5rem; }
+input[type=range] { accent-color: var(--accent); width: min(18rem, 100%); }
+label { font-size: .95rem; }
+.narr {
+  min-height: 4.5rem; border-left: 3px solid var(--accent); padding: .35rem .9rem; margin: .75rem 0;
+  background: var(--bg); border-radius: 0 6px 6px 0;
+}
+.narr strong { color: var(--ink); }
+.stepcount { font-size: .88rem; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.readout { font-variant-numeric: tabular-nums; }
+.readout dt { color: var(--ink-3); font-size: .88rem; }
+.readout dd { margin: 0 0 .5rem; font-size: 1.05rem; }
+.kv { display: grid; grid-template-columns: minmax(7rem, 48%) minmax(0, 1fr); gap: .15rem 1rem; font-variant-numeric: tabular-nums; }
+.kv > :nth-child(odd) { color: var(--ink-3); }
+.mono, code { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: .92em; }
+.math { font-family: "Cambria Math", "STIX Two Math", "Latin Modern Math", Georgia, serif; font-style: normal; }
+.math i, i.v { font-style: italic; }
+/* matrices */
+.mats { display: flex; flex-wrap: wrap; gap: 1rem 1.5rem; align-items: center; margin: .75rem 0; }
+.matwrap { display: inline-flex; flex-direction: column; align-items: center; gap: .2rem; }
+.matwrap .cap { font-size: .9rem; color: var(--ink-3); }
+table.mat { border-collapse: separate; border-spacing: 2px; position: relative; padding: 0 6px;
+  font-variant-numeric: tabular-nums; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: .92rem; }
+table.mat::before, table.mat::after { content: ""; position: absolute; top: 0; bottom: 0; width: 6px;
+  border: 1.5px solid var(--ink-2); }
+table.mat::before { left: 0; border-right: none; }
+table.mat::after { right: 0; border-left: none; }
+table.mat td { padding: .2rem .5rem; text-align: right; min-width: 3.2rem; border-radius: 4px;
+  transition: background-color .25s; }
+table.mat td.pivot { background: var(--t2); outline: 2px solid var(--s2); }
+table.mat td.hlrow { background: var(--t1); }
+table.mat td.src { background: var(--t4); }
+table.mat td.newL { background: var(--t3); outline: 2px solid var(--s3); }
+table.mat td.zeroed { color: var(--ink-3); }
+table.mat td.dim { color: var(--ink-3); opacity: .55; }
+table.mat td.done { background: var(--t3); }
+.op { font-size: 1.3rem; color: var(--ink-3); }
+/* legend chips */
+.legend { display: flex; flex-wrap: wrap; gap: .4rem 1rem; font-size: .88rem; color: var(--ink-2); margin: .25rem 0; }
+.chip { display: inline-block; width: .9rem; height: .9rem; border-radius: 3px; vertical-align: -2px; margin-right: .3rem; }
+/* svg */
+svg.plot { width: 100%; height: auto; display: block; overflow: visible; }
+svg.plot text { fill: var(--ink-2); font: 12px system-ui, sans-serif; }
+svg.plot .axis { stroke: var(--ink-3); stroke-width: 1; }
+svg.plot .grid { stroke: var(--rule); stroke-width: 1; }
+.fig { margin: .75rem 0; }
+.figcap { font-size: .9rem; color: var(--ink-3); margin-top: .35rem; }
+details { margin: .75rem 0; }
+summary { cursor: pointer; color: var(--accent); }
+.predict { background: var(--t4); border-radius: 8px; padding: .5rem .8rem; margin: .5rem 0; }
+.good { color: var(--s3); font-weight: 600; }
+.bad { color: var(--s2); font-weight: 600; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+nav.toc { font-size: .95rem; }
+nav.toc ol { padding-left: 1.2rem; margin: .25rem 0; }
+footer.site { margin-top: 4rem; padding-top: 1rem; border-top: 1px solid var(--rule); font-size: .88rem; color: var(--ink-3); }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+@media (max-width: 560px) { body { font-size: 16px; } h1 { font-size: 1.55rem; } table.mat td { min-width: 2.4rem; padding: .15rem .3rem; } }
+/* SVD explorers */
+canvas.plane { width: 100%; aspect-ratio: 1 / 1; display: block; touch-action: none; border-radius: 6px; background: var(--bg); }
+canvas.plane:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+.imgs { display: flex; flex-wrap: wrap; gap: 1rem; }
+.imgs figure { margin: 0; flex: 0 1 17rem; min-width: 0; }
+.imgs canvas { width: 100%; height: auto; display: block; border-radius: 4px; background: var(--bg); }
+.imgs figcaption { font-size: .9rem; color: var(--ink-3); margin-top: .3rem; font-variant-numeric: tabular-nums; }
+.seg { display: inline-flex; flex-wrap: wrap; gap: .35rem; }
+button[aria-pressed="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.recipe { display: grid; grid-template-columns: auto 1fr; gap: .3rem 1rem; font-variant-numeric: tabular-nums; font-size: .95rem; }
+.recipe > :nth-child(odd) { color: var(--ink-3); font-size: .88rem; }
+.c1 { color: var(--s1); } .c2 { color: var(--s2); } .c3 { color: var(--s3); }
+table.data { border-collapse: collapse; font-variant-numeric: tabular-nums; font-size: .95rem; margin: .5rem 0; }
+table.data th, table.data td { padding: .25rem .7rem; text-align: right; border-bottom: 1px solid var(--rule); }
+table.data th { color: var(--ink-3); font-weight: 500; }
+table.data th:first-child, table.data td:first-child { text-align: left; }
+
+</style>
+<script>
+/* ---------- shared helpers: numerics, formatting, DOM, SVG, stepper ---------- */
+"use strict";
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
+const el = (tag, attrs = {}, ...kids) => {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (k === "class") e.className = v; else if (k === "html") e.innerHTML = v;
+    else if (k.startsWith("on")) e.addEventListener(k.slice(2), v); else e.setAttribute(k, v);
+  }
+  for (const k of kids) if (k != null) e.append(k.nodeType ? k : document.createTextNode(k));
+  return e;
+};
+const SVGNS = "http://www.w3.org/2000/svg";
+const sv = (tag, attrs = {}, parent) => {
+  const e = document.createElementNS(SVGNS, tag);
+  for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
+  if (parent) parent.appendChild(e);
+  return e;
+};
+const cssVar = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+
+/* number formatting */
+function fmt(x, d = 4) {
+  if (!isFinite(x)) return x > 0 ? "∞" : (x < 0 ? "−∞" : "NaN");
+  if (x === 0) return "0";
+  const a = Math.abs(x);
+  let s;
+  if (a >= 1e5 || a < 1e-3) s = fmtExp(x, d);
+  else { s = (+x.toFixed(d)).toString(); }
+  return s.replace("-", "−");
+}
+function fmtExp(x, d = 3) {
+  if (x === 0) return "0";
+  const e = Math.floor(Math.log10(Math.abs(x)));
+  let m = x / Math.pow(10, e);
+  if (Math.abs(+m.toFixed(d - 1)) >= 10) { m /= 10; return fmtExp(x, d); }
+  return (+m.toFixed(d - 1)).toString().replace("-", "−") + "×10" + sup(e);
+}
+function sup(n) {
+  const m = { "-": "⁻", "0": "⁰", "1": "¹", "2": "²", "3": "³", "4": "⁴", "5": "⁵", "6": "⁶", "7": "⁷", "8": "⁸", "9": "⁹" };
+  return String(n).split("").map(c => m[c] || c).join("");
+}
+function fmtFrac(x) { // nice display for values that are near simple fractions/integers
+  if (Math.abs(x - Math.round(x)) < 1e-12) return String(Math.round(x)).replace("-", "−");
+  return fmt(x, 4);
+}
+
+/* ---------- linear algebra (dense, arrays of arrays) ---------- */
+const LA = {
+  clone: A => A.map(r => r.slice()),
+  eye: n => Array.from({ length: n }, (_, i) => Array.from({ length: n }, (_, j) => +(i === j))),
+  zeros: (m, n) => Array.from({ length: m }, () => new Array(n).fill(0)),
+  T: A => A[0].map((_, j) => A.map(r => r[j])),
+  mul(A, B) {
+    const m = A.length, k = B.length, n = B[0].length, C = LA.zeros(m, n);
+    for (let i = 0; i < m; i++) for (let p = 0; p < k; p++) { const a = A[i][p]; if (a) for (let j = 0; j < n; j++) C[i][j] += a * B[p][j]; }
+    return C;
+  },
+  mv: (A, x) => A.map(r => r.reduce((s, a, j) => s + a * x[j], 0)),
+  dot: (x, y) => x.reduce((s, a, i) => s + a * y[i], 0),
+  norm2: x => Math.hypot(...x),
+  norm1: x => x.reduce((s, a) => s + Math.abs(a), 0),
+  normInf: x => Math.max(...x.map(Math.abs)),
+  sub: (x, y) => x.map((a, i) => a - y[i]),
+  matNorm1: A => Math.max(...A[0].map((_, j) => A.reduce((s, r) => s + Math.abs(r[j]), 0))),
+  matNormInf: A => Math.max(...A.map(r => r.reduce((s, a) => s + Math.abs(a), 0))),
+  /* LU with optional partial pivoting; returns {L,U,perm,swaps} */
+  lu(A0, pivot = true) {
+    const n = A0.length, U = LA.clone(A0), L = LA.eye(n), perm = [...Array(n).keys()];
+    for (let k = 0; k < n - 1; k++) {
+      if (pivot) {
+        let p = k; for (let i = k + 1; i < n; i++) if (Math.abs(U[i][k]) > Math.abs(U[p][k])) p = i;
+        if (p !== k) { [U[k], U[p]] = [U[p], U[k]]; [perm[k], perm[p]] = [perm[p], perm[k]];
+          for (let j = 0; j < k; j++) [L[k][j], L[p][j]] = [L[p][j], L[k][j]]; }
+      }
+      for (let i = k + 1; i < n; i++) {
+        const m = U[i][k] / U[k][k]; L[i][k] = m;
+        for (let j = k; j < n; j++) U[i][j] -= m * U[k][j];
+        U[i][k] = 0;
+      }
+    }
+    return { L, U, perm };
+  },
+  fwd(L, b) { const n = b.length, y = new Array(n); for (let i = 0; i < n; i++) { let s = b[i]; for (let j = 0; j < i; j++) s -= L[i][j] * y[j]; y[i] = s / L[i][i]; } return y; },
+  back(U, y) { const n = y.length, x = new Array(n); for (let i = n - 1; i >= 0; i--) { let s = y[i]; for (let j = i + 1; j < n; j++) s -= U[i][j] * x[j]; x[i] = s / U[i][i]; } return x; },
+  solve(A, b, pivot = true) { const { L, U, perm } = LA.lu(A, pivot); return LA.back(U, LA.fwd(L, perm.map(i => b[i]))); },
+  /* Gauss–Jordan inverse with partial pivoting (the usual textbook inverse) */
+  inv(A0) {
+    const n = A0.length, M = A0.map((r, i) => [...r, ...LA.eye(n)[i]]);
+    for (let k = 0; k < n; k++) {
+      let p = k; for (let i = k + 1; i < n; i++) if (Math.abs(M[i][k]) > Math.abs(M[p][k])) p = i;
+      [M[k], M[p]] = [M[p], M[k]];
+      const d = M[k][k]; for (let j = 0; j < 2 * n; j++) M[k][j] /= d;
+      for (let i = 0; i < n; i++) if (i !== k) { const m = M[i][k]; if (m) for (let j = 0; j < 2 * n; j++) M[i][j] -= m * M[k][j]; }
+    }
+    return M.map(r => r.slice(n));
+  },
+  /* Cholesky solve (for normal equations) */
+  cholSolve(A, b) {
+    const n = A.length, L = LA.zeros(n, n);
+    for (let j = 0; j < n; j++) {
+      let s = A[j][j]; for (let k = 0; k < j; k++) s -= L[j][k] * L[j][k];
+      if (!(s > 0)) return null;
+      L[j][j] = Math.sqrt(s);
+      for (let i = j + 1; i < n; i++) { let t = A[i][j]; for (let k = 0; k < j; k++) t -= L[i][k] * L[j][k]; L[i][j] = t / L[j][j]; }
+    }
+    const y = LA.fwd(L, b); return LA.back(LA.T(L), y);
+  },
+  /* Householder QR least squares: returns x minimising ||Ax-b|| */
+  qrSolve(A0, b0) {
+    const m = A0.length, n = A0[0].length, A = LA.clone(A0), b = b0.slice();
+    for (let k = 0; k < n; k++) {
+      let nr = 0; for (let i = k; i < m; i++) nr += A[i][k] * A[i][k]; nr = Math.sqrt(nr);
+      if (nr === 0) continue;
+      const alpha = A[k][k] > 0 ? -nr : nr, v = new Array(m).fill(0);
+      v[k] = A[k][k] - alpha; for (let i = k + 1; i < m; i++) v[i] = A[i][k];
+      let vv = 0; for (let i = k; i < m; i++) vv += v[i] * v[i];
+      if (vv === 0) continue;
+      for (let j = k; j < n; j++) { let s = 0; for (let i = k; i < m; i++) s += v[i] * A[i][j]; s = 2 * s / vv; for (let i = k; i < m; i++) A[i][j] -= s * v[i]; }
+      let s = 0; for (let i = k; i < m; i++) s += v[i] * b[i]; s = 2 * s / vv; for (let i = k; i < m; i++) b[i] -= s * v[i];
+    }
+    const R = A.slice(0, n).map(r => r.slice(0, n));
+    return LA.back(R, b.slice(0, n));
+  },
+  /* singular values via one-sided Jacobi (accurate for small dense matrices) */
+  svals(A0) {
+    const m = A0.length, n = A0[0].length;
+    let U = A0.map(r => r.slice());
+    if (m < n) U = LA.T(U);
+    const cols = U[0].length, rows = U.length;
+    for (let sweep = 0; sweep < 60; sweep++) {
+      let off = 0;
+      for (let p = 0; p < cols - 1; p++) for (let q = p + 1; q < cols; q++) {
+        let a = 0, b = 0, c = 0;
+        for (let i = 0; i < rows; i++) { a += U[i][p] * U[i][p]; b += U[i][q] * U[i][q]; c += U[i][p] * U[i][q]; }
+        if (Math.abs(c) <= 1e-15 * Math.sqrt(a * b)) continue;
+        off = Math.max(off, Math.abs(c) / Math.sqrt(a * b));
+        const z = (b - a) / (2 * c), t = Math.sign(z || 1) / (Math.abs(z) + Math.sqrt(1 + z * z));
+        const cs = 1 / Math.sqrt(1 + t * t), sn = cs * t;
+        for (let i = 0; i < rows; i++) { const up = U[i][p], uq = U[i][q]; U[i][p] = cs * up - sn * uq; U[i][q] = sn * up + cs * uq; }
+      }
+      if (off < 1e-15) break;
+    }
+    const s = []; for (let j = 0; j < cols; j++) { let t = 0; for (let i = 0; i < rows; i++) t += U[i][j] * U[i][j]; s.push(Math.sqrt(t)); }
+    return s.sort((a, b) => b - a);
+  },
+  cond2(A) { const s = LA.svals(A); return s[0] / s[s.length - 1]; },
+};
+
+/* seeded PRNG so every student sees the same "random" numbers */
+function mulberry32(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+
+/* ---------- matrix rendering ---------- */
+/* cls(i,j) -> class name; fmtf(v,i,j) -> string */
+function matTable(M, { label = "matrix", cls = () => "", fmtf = v => fmtFrac(v), cap = null } = {}) {
+  const t = el("table", { class: "mat", "aria-label": `${label}, ${M.length} by ${M[0].length}` });
+  const tb = el("tbody"); t.append(tb);
+  M.forEach((r, i) => { const tr = el("tr"); r.forEach((v, j) => { const c = cls(i, j); tr.append(el("td", c ? { class: c } : {}, fmtf(v, i, j))); }); tb.append(tr); });
+  const w = el("div", { class: "matwrap" }, t);
+  if (cap) w.append(el("div", { class: "cap", html: cap }));
+  return w;
+}
+const colVec = x => x.map(v => [v]);
+
+/* ---------- linear scale + axes ---------- */
+function scale(d0, d1, r0, r1, log = false) {
+  if (log) { const a = Math.log10(d0), b = Math.log10(d1); const f = v => r0 + (Math.log10(v) - a) / (b - a) * (r1 - r0); f.inv = p => Math.pow(10, a + (p - r0) / (r1 - r0) * (b - a)); return f; }
+  const f = v => r0 + (v - d0) / (d1 - d0) * (r1 - r0); f.inv = p => d0 + (p - r0) / (r1 - r0) * (d1 - d0); return f;
+}
+function niceTicks(a, b, n = 6) {
+  const span = b - a, step0 = span / n, mag = Math.pow(10, Math.floor(Math.log10(step0)));
+  const step = [1, 2, 2.5, 5, 10].map(s => s * mag).find(s => span / s <= n) || 10 * mag;
+  const out = []; for (let v = Math.ceil(a / step) * step; v <= b + 1e-9 * step; v += step) out.push(+v.toFixed(10));
+  return out;
+}
+/* axes(svg, X, Y, {xt, yt, xlab, ylab, W, H, pad, log flags}) */
+function drawAxes(g, X, Y, o) {
+  const { x0, x1, y0, y1 } = o;
+  const xt = o.xt || niceTicks(o.xd[0], o.xd[1]), yt = o.yt || niceTicks(o.yd[0], o.yd[1]);
+  for (const t of yt) { sv("line", { x1: x0, x2: x1, y1: Y(t), y2: Y(t), class: "grid" }, g);
+    sv("text", { x: x0 - 6, y: Y(t) + 4, "text-anchor": "end" }, g).textContent = o.yfmt ? o.yfmt(t) : fmt(t, 3); }
+  for (const t of xt) { sv("line", { x1: X(t), x2: X(t), y1: y0, y2: y0 + 4, class: "axis" }, g);
+    sv("text", { x: X(t), y: y0 + 17, "text-anchor": "middle" }, g).textContent = o.xfmt ? o.xfmt(t) : fmt(t, 3); }
+  sv("line", { x1: x0, x2: x1, y1: y0, y2: y0, class: "axis" }, g);
+  sv("line", { x1: x0, x2: x0, y1: y0, y2: y1, class: "axis" }, g);
+  if (o.xlab) sv("text", { x: (x0 + x1) / 2, y: y0 + 36, "text-anchor": "middle" }, g).textContent = o.xlab;
+  if (o.ylab) { const t = sv("text", { x: 0, y: 0, "text-anchor": "middle", transform: `translate(${x0 - 46},${(y0 + y1) / 2}) rotate(-90)` }, g); t.textContent = o.ylab; }
+}
+
+/* ---------- stepper: prev / next / reset with aria-live narration ---------- */
+class Stepper {
+  constructor(root, { onRender, total, labels = {} }) {
+    this.i = 0; this.onRender = onRender; this.total = total;
+    this.prev = el("button", { type: "button", onclick: () => this.go(this.i - 1) }, labels.prev || "◀ Back");
+    this.next = el("button", { type: "button", class: "primary", onclick: () => this.go(this.i + 1) }, labels.next || "Next ▶");
+    this.reset = el("button", { type: "button", onclick: () => this.go(0) }, "Start over");
+    this.count = el("span", { class: "stepcount", "aria-hidden": "true" });
+    root.append(this.prev, this.next, this.reset, this.count);
+  }
+  setTotal(n) { this.total = n; this.go(Math.min(this.i, n - 1)); }
+  go(i) {
+    this.i = Math.max(0, Math.min(this.total - 1, i));
+    this.prev.disabled = this.i === 0; this.next.disabled = this.i === this.total - 1;
+    this.count.textContent = `Step ${this.i + 1} of ${this.total}`;
+    this.onRender(this.i);
+  }
+}
+
+/* announce helper for sliders etc. (debounced) */
+function makeAnnouncer(node) { let t; return msg => { clearTimeout(t); t = setTimeout(() => { node.textContent = msg; }, 350); }; }
+
+/* ---------- full SVD by one-sided Jacobi (Hestenes) ----------
+   svd(A) for an m x n array-of-rows. Returns {s, U, V}: s sorted descending,
+   U = array of r column vectors (length m), V = array of r column vectors (length n), r = min(m, n). */
+LA.svd = function (A0) {
+  let m = A0.length, n = A0[0].length, tr = false, get = (i, j) => A0[i][j];
+  if (m < n) { tr = true; [m, n] = [n, m]; get = (i, j) => A0[j][i]; }
+  const C = Array.from({ length: n }, (_, j) => { const c = new Float64Array(m); for (let i = 0; i < m; i++) c[i] = get(i, j); return c; });
+  const V = Array.from({ length: n }, (_, j) => { const v = new Float64Array(n); v[j] = 1; return v; });
+  for (let sweep = 0; sweep < 40; sweep++) {
+    let off = 0;
+    for (let p = 0; p < n - 1; p++) for (let q = p + 1; q < n; q++) {
+      const cp = C[p], cq = C[q];
+      let a = 0, b = 0, c = 0;
+      for (let i = 0; i < m; i++) { const x = cp[i], y = cq[i]; a += x * x; b += y * y; c += x * y; }
+      if (c === 0 || Math.abs(c) <= 1e-15 * Math.sqrt(a * b)) continue;
+      off = Math.max(off, Math.abs(c) / Math.sqrt(a * b));
+      const z = (b - a) / (2 * c), t = Math.sign(z || 1) / (Math.abs(z) + Math.sqrt(1 + z * z));
+      const cs = 1 / Math.sqrt(1 + t * t), sn = cs * t;
+      for (let i = 0; i < m; i++) { const x = cp[i], y = cq[i]; cp[i] = cs * x - sn * y; cq[i] = sn * x + cs * y; }
+      const vp = V[p], vq = V[q];
+      for (let i = 0; i < n; i++) { const x = vp[i], y = vq[i]; vp[i] = cs * x - sn * y; vq[i] = sn * x + cs * y; }
+    }
+    if (off < 1e-14) break;
+  }
+  const norms = C.map(c => Math.sqrt(c.reduce((s, x) => s + x * x, 0)));
+  const order = [...norms.keys()].sort((i, j) => norms[j] - norms[i]);
+  const s = order.map(j => norms[j]);
+  const Uc = order.map(j => { const c = C[j], d = norms[j]; return d > 0 ? c.map(x => x / d) : c.map(() => 0); });
+  const Vc = order.map(j => V[j]);
+  return tr ? { s, U: Vc, V: Uc } : { s, U: Uc, V: Vc };
+};
+/* flip signs so each v_i has a positive first nonzero entry (u_i flips with it) */
+LA.svdTidy = function (S) {
+  S.V.forEach((v, i) => { const k = v.findIndex(x => Math.abs(x) > 1e-12); if (k >= 0 && v[k] < 0) { S.V[i] = v.map(x => -x); S.U[i] = S.U[i].map(x => -x); } });
+  return S;
+};
+/* standard normal from a uniform PRNG (Box–Muller) */
+function gauss(rand) { let u = 0; while (u === 0) u = rand(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * rand()); }
+
+</script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<div class="wrap">
+<header class="site"><p class="crumb"><a href="index.html">The SVD &mdash; explorers</a></p><p class="crumb">MATH/CCM 472/572 &middot; The Singular Value Decomposition</p></header>
+<main id="main">
+<!-- title: Circle to Ellipse -->
+<!-- desc: Drag a vector around the unit circle and watch A = U Sigma V^T turn the circle into an ellipse, one stage at a time. -->
+<h1>What a matrix does to a circle</h1>
+<p class="lede">Every matrix turns the unit circle into an ellipse. Two perpendicular input directions land on the ellipse&rsquo;s axes: <span class="c1"><i>Av</i><sub>1</sub> = &sigma;<sub>1</sub><i>u</i><sub>1</sub></span> and <span class="c2"><i>Av</i><sub>2</sub> = &sigma;<sub>2</sub><i>u</i><sub>2</sub></span>. Drag <i>x</i> around the circle, then step through <em>split &rarr; stretch &rarr; add</em> to watch <i>A</i> = <i>U</i>&Sigma;<i>V</i><sup>T</sup> happen.</p>
+
+<div class="row">
+  <div class="col">
+    <p class="muted" style="margin:0 0 .3rem">Input: the unit circle &middot; <span class="readout" id="xlabel"></span></p>
+    <canvas id="cin" class="plane" tabindex="0" aria-label="Unit circle with the input vector x. Drag, or focus and use the arrow keys, to turn x. Shift turns faster."></canvas>
+  </div>
+  <div class="col">
+    <p class="muted" style="margin:0 0 .3rem"><span id="outTitle">Output</span> &middot; <span class="readout" id="axlabel"></span></p>
+    <canvas id="cout" class="plane" aria-describedby="stageNote" role="img" aria-label="Image of the circle under the current stage of A = U Sigma V transpose."></canvas>
+  </div>
+</div>
+<div class="narr" id="stageNote" aria-live="polite"></div>
+
+<div class="panel">
+  <div class="controls" aria-label="The matrix A">
+    <span><i>A</i> =</span>
+    <input type="number" step="0.1" id="a11" value="3" aria-label="A row 1 column 1"><input type="number" step="0.1" id="a12" value="0" aria-label="A row 1 column 2">
+    <span style="width:.5rem"></span>
+    <input type="number" step="0.1" id="a21" value="4" aria-label="A row 2 column 1"><input type="number" step="0.1" id="a22" value="5" aria-label="A row 2 column 2">
+  </div>
+  <div class="controls seg" role="group" aria-label="Example matrices" id="presets">
+    <button type="button" data-m="3,0,4,5">Course example</button>
+    <button type="button" data-m="2,0,0,0.5">Diagonal</button>
+    <button type="button" data-m="1,1,0,1">Shear</button>
+    <button type="button" data-m="0,-1,1,0">Rotation</button>
+    <button type="button" data-m="2,1,1,-1">Flips orientation</button>
+    <button type="button" data-m="1,2,1,2.1">Nearly singular</button>
+    <button type="button" data-m="1,2,2,4">Rank one</button>
+  </div>
+  <div class="controls seg" role="group" aria-label="Stages of A = U Sigma V transpose" id="steps">
+    <button type="button" data-s="0"><i>x</i> &middot; start</button>
+    <button type="button" data-s="1"><i>V</i><sup>T</sup><i>x</i> &middot; split</button>
+    <button type="button" data-s="2">&Sigma;<i>V</i><sup>T</sup><i>x</i> &middot; stretch</button>
+    <button type="button" data-s="3"><i>U</i>&Sigma;<i>V</i><sup>T</sup><i>x</i> &middot; add</button>
+    <button type="button" id="play" class="primary">Play all</button>
+  </div>
+  <div class="controls">
+    <label for="stage">Stage</label><input type="range" id="stage" min="0" max="3" step="0.01" value="3">
+  </div>
+  <div class="controls">
+    <label><input type="checkbox" id="tE"> show <i>e</i><sub>1</sub>, <i>e</i><sub>2</sub> and their images</label>
+    <label><input type="checkbox" id="tR1"> best rank-one approximation <i>A</i><sub>1</sub></label>
+    <button type="button" id="notesx">Point <i>x</i> along (1, 3), as in the notes</button>
+  </div>
+</div>
+
+<div class="row">
+  <div class="col">
+    <h3 style="margin-top:.5rem">Split, stretch, add for the current <i>x</i></h3>
+    <p class="figcap" style="margin-top:0">Here <i>x</i> is a unit vector. The page starts with <i>x</i> pointing along (1, 3), the notes&rsquo; worked example scaled to length 1. Scale <i>x</i> up by &radic;10 &asymp; 3.162 and every number in steps 1&ndash;3 scales with it: the piece sizes become (2&radic;2, &radic;2) and <i>Ax</i> becomes (3, 19), the notes&rsquo; numbers.</p>
+    <div class="recipe" id="recipe"></div>
+    <p class="figcap" id="r1note" hidden></p>
+  </div>
+  <div class="col">
+    <h3 style="margin-top:.5rem">How much <i>A</i> stretches <i>x</i></h3>
+    <canvas id="cplot" class="plane" style="aspect-ratio:2.2/1" role="img" aria-label="Graph of the length of Ax as the angle of x goes from 0 to 180 degrees. The maximum is sigma 1, at v1; the minimum is sigma 2, at v2."></canvas>
+    <dl class="kv readout" id="facts" style="margin-top:.5rem"></dl>
+  </div>
+</div>
+
+<h2>Things to try</h2>
+<ul>
+  <li><strong>Rotation.</strong> The circle stays a circle, so every direction is stretched by 1 and &sigma;<sub>1</sub> = &sigma;<sub>2</sub> = 1. Which directions are <i>v</i><sub>1</sub>, <i>v</i><sub>2</sub> now?</li>
+  <li><strong>Rank one.</strong> The ellipse collapses to a segment, &sigma;<sub>2</sub> = 0, and cond(<i>A</i>) = &infin;. What does <i>A</i> do to <i>v</i><sub>2</sub>?</li>
+  <li><strong>Nearly singular.</strong> A long, thin ellipse. Compare cond(<i>A</i>) with the ratio of its axes.</li>
+  <li><strong>Flips orientation.</strong> The colors run the other way around the ellipse. The &ldquo;add&rdquo; stage now includes a reflection.</li>
+  <li><strong>Best rank-one approximation.</strong> Turn it on and drag <i>x</i>. Where is the error largest, and how large does it get?</li>
+</ul>
+
+<script>
+(() => {
+  const inputs = ["a11", "a12", "a21", "a22"].map(id => $("#" + id));
+  const cin = $("#cin"), cout = $("#cout"), cplot = $("#cplot");
+  const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  let A = [[3, 0], [4, 5]], S = null, theta = Math.atan2(3, 1), stage = 3, playing = false;
+  const mul = (M, v) => [M[0][0] * v[0] + M[0][1] * v[1], M[1][0] * v[0] + M[1][1] * v[1]];
+  const mm = (P, Q) => [[P[0][0] * Q[0][0] + P[0][1] * Q[1][0], P[0][0] * Q[0][1] + P[0][1] * Q[1][1]],
+                        [P[1][0] * Q[0][0] + P[1][1] * Q[1][0], P[1][0] * Q[0][1] + P[1][1] * Q[1][1]]];
+  const dot = (a, b) => a[0] * b[0] + a[1] * b[1], nrm = a => Math.hypot(a[0], a[1]);
+  const rot = t => [[Math.cos(t), -Math.sin(t)], [Math.sin(t), Math.cos(t)]];
+  const f = (x, d = 2) => (Math.abs(x) < 5e-10 ? 0 : x).toFixed(d).replace("-", "−");
+  const vec = (v, d = 2) => `(${f(v[0], d)}, ${f(v[1], d)})`;
+
+  function svd2(A) {
+    const p = A[0][0] ** 2 + A[1][0] ** 2, r = A[0][1] ** 2 + A[1][1] ** 2, q = A[0][0] * A[0][1] + A[1][0] * A[1][1];
+    const th = 0.5 * Math.atan2(2 * q, p - r);
+    const v1 = [Math.cos(th), Math.sin(th)], v2 = [-Math.sin(th), Math.cos(th)];
+    const Av1 = mul(A, v1), Av2 = mul(A, v2);
+    let s1 = nrm(Av1), s2 = nrm(Av2);
+    const u1 = s1 > 1e-12 ? [Av1[0] / s1, Av1[1] / s1] : [1, 0];
+    const tiny = s2 <= 1e-9 * Math.max(1, s1);
+    const u2 = tiny ? [-u1[1], u1[0]] : [Av2[0] / s2, Av2[1] / s2];
+    if (tiny) s2 = 0;
+    return { v1, v2, u1, u2, s1, s2, thV: th, thU: Math.atan2(u1[1], u1[0]), refl: u1[0] * u2[1] - u1[1] * u2[0] < 0 };
+  }
+  /* path I -> V^T -> Sigma V^T -> U Sigma V^T as t goes 0 -> 3 */
+  function stageMatrix(t) {
+    const Vt = [[S.v1[0], S.v1[1]], [S.v2[0], S.v2[1]]];
+    if (t <= 1) return rot(-S.thV * t);
+    if (t <= 2) { const a = t - 1; return mm([[1 + a * (S.s1 - 1), 0], [0, 1 + a * (S.s2 - 1)]], Vt); }
+    const a = t - 2, O = mm(rot(S.thU * a), [[1, 0], [0, S.refl ? 1 - 2 * a : 1]]);
+    return mm(mm(O, [[S.s1, 0], [0, S.s2]]), Vt);
+  }
+  const C = () => ({ ink: cssVar("--ink"), ink2: cssVar("--ink-2"), ink3: cssVar("--ink-3"), rule: cssVar("--rule"), bg: cssVar("--bg"),
+                     s1: cssVar("--s1"), s2: cssVar("--s2"), s3: cssVar("--s3") });
+  function setup(cv) {
+    const dpr = window.devicePixelRatio || 1, w = cv.clientWidth, h = cv.clientHeight;
+    if (cv.width !== Math.round(w * dpr) || cv.height !== Math.round(h * dpr)) { cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); }
+    const ctx = cv.getContext("2d"); ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, w, h);
+    return { ctx, w, h };
+  }
+  function plane(cv, R, c) {
+    const { ctx, w, h } = setup(cv), sc = Math.min(w, h) / (2 * R), cx = w / 2, cy = h / 2;
+    const P = v => [cx + v[0] * sc, cy - v[1] * sc];
+    ctx.fillStyle = c.bg; ctx.fillRect(0, 0, w, h);
+    const step = R > 12 ? 5 : R > 5 ? 2 : R > 2.5 ? 1 : 0.5;
+    ctx.strokeStyle = c.rule; ctx.lineWidth = 0.7;
+    for (let g = -Math.floor(R / step) * step; g <= R; g += step) {
+      const a = P([g, 0]), b = P([0, g]);
+      ctx.beginPath(); ctx.moveTo(a[0], 0); ctx.lineTo(a[0], h); ctx.moveTo(0, b[1]); ctx.lineTo(w, b[1]); ctx.stroke();
+    }
+    ctx.strokeStyle = c.ink3; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(0, cy); ctx.lineTo(w, cy); ctx.moveTo(cx, 0); ctx.lineTo(cx, h); ctx.stroke();
+    ctx.fillStyle = c.ink3; ctx.font = "12px system-ui, sans-serif";
+    ctx.fillText(String(step), P([step, 0])[0] - 3, cy + 14);
+    return { ctx, P };
+  }
+  function arrow(ctx, P, from, to, color, lw, label, dash) {
+    const a = P(from), b = P(to), dx = b[0] - a[0], dy = b[1] - a[1], L = Math.hypot(dx, dy);
+    ctx.strokeStyle = color; ctx.fillStyle = color; ctx.lineWidth = lw; ctx.setLineDash(dash || []);
+    ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke(); ctx.setLineDash([]);
+    if (L > 6) {
+      const ux = dx / L, uy = dy / L, s = 7 + lw * 1.5;
+      ctx.beginPath(); ctx.moveTo(b[0], b[1]); ctx.lineTo(b[0] - s * ux - s * .45 * uy, b[1] - s * uy + s * .45 * ux); ctx.lineTo(b[0] - s * ux + s * .45 * uy, b[1] - s * uy - s * .45 * ux); ctx.closePath(); ctx.fill();
+    }
+    if (label) { ctx.font = "600 15px system-ui, sans-serif"; const o = L > 0 ? 15 : 0; ctx.fillText(label, b[0] + (L ? dx / L : 0) * o - 6, b[1] + (L ? dy / L : 0) * o + 5); }
+  }
+  function dots(ctx, P, M, r) {
+    const N = 48;
+    for (let i = 0; i < N; i++) { const t = 2 * Math.PI * i / N, p = P(mul(M, [Math.cos(t), Math.sin(t)]));
+      ctx.fillStyle = `hsl(${360 * i / N} 70% 52%)`; ctx.beginPath(); ctx.arc(p[0], p[1], r, 0, 2 * Math.PI); ctx.fill(); }
+  }
+  function curve(ctx, P, M, color, lw) {
+    ctx.strokeStyle = color; ctx.lineWidth = lw; ctx.beginPath();
+    for (let i = 0; i <= 200; i++) { const t = 2 * Math.PI * i / 200, p = P(mul(M, [Math.cos(t), Math.sin(t)])); i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1]); }
+    ctx.stroke();
+  }
+  function draw() {
+    const c = C(), x = [Math.cos(theta), Math.sin(theta)], showE = $("#tE").checked, showR1 = $("#tR1").checked, full = stage >= 2.999;
+    { const { ctx, P } = plane(cin, 1.55, c), I = [[1, 0], [0, 1]];
+      curve(ctx, P, I, c.ink3, 1.2); dots(ctx, P, I, 3.2);
+      if (showE) { arrow(ctx, P, [0, 0], [1, 0], c.ink3, 1.4, "e₁"); arrow(ctx, P, [0, 0], [0, 1], c.ink3, 1.4, "e₂"); }
+      arrow(ctx, P, [0, 0], S.v1, c.s1, 2.6, "v₁"); arrow(ctx, P, [0, 0], S.v2, c.s2, 2.6, "v₂");
+      arrow(ctx, P, [0, 0], x, c.ink, 2, "x"); const px = P(x); ctx.fillStyle = c.ink; ctx.beginPath(); ctx.arc(px[0], px[1], 6, 0, 2 * Math.PI); ctx.fill(); }
+    { const R = Math.max(S.s1, 1) * 1.2, M = stageMatrix(stage), { ctx, P } = plane(cout, R, c);
+      if (!full) curve(ctx, P, [[1, 0], [0, 1]], c.rule, 1);
+      curve(ctx, P, M, c.ink3, 1.4); dots(ctx, P, M, 2.8);
+      if (showE && full) { arrow(ctx, P, [0, 0], mul(A, [1, 0]), c.ink3, 1.4, "Ae₁"); arrow(ctx, P, [0, 0], mul(A, [0, 1]), c.ink3, 1.4, "Ae₂"); }
+      arrow(ctx, P, [0, 0], mul(M, S.v1), c.s1, 2.6, full ? "σ₁u₁" : "");
+      arrow(ctx, P, [0, 0], mul(M, S.v2), c.s2, 2.6, full ? "σ₂u₂" : "");
+      const Mx = mul(M, x); arrow(ctx, P, [0, 0], Mx, c.ink, 2, full ? "Ax" : ""); const pm = P(Mx);
+      ctx.fillStyle = c.ink; ctx.beginPath(); ctx.arc(pm[0], pm[1], 5.5, 0, 2 * Math.PI); ctx.fill();
+      if (showR1 && full) {
+        const L = S.s1; ctx.strokeStyle = c.s3; ctx.lineWidth = 3; ctx.globalAlpha = .6;
+        const a = P([-L * S.u1[0], -L * S.u1[1]]), b = P([L * S.u1[0], L * S.u1[1]]); ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke(); ctx.globalAlpha = 1;
+        const c1 = dot(S.v1, x), A1x = [S.s1 * c1 * S.u1[0], S.s1 * c1 * S.u1[1]], p1 = P(A1x);
+        ctx.fillStyle = c.s3; ctx.beginPath(); ctx.arc(p1[0], p1[1], 5, 0, 2 * Math.PI); ctx.fill();
+        arrow(ctx, P, A1x, Mx, c.s3, 1.8, "", [5, 4]);
+      } }
+    { const { ctx, w, h } = setup(cplot); ctx.fillStyle = c.bg; ctx.fillRect(0, 0, w, h);
+      const l = 36, r = 10, t = 10, b = 24, top = Math.max(S.s1 * 1.12, 0.5);
+      const X = d => l + (w - l - r) * d / 180, Y = s => h - b - (h - t - b) * s / top;
+      ctx.strokeStyle = c.rule; ctx.lineWidth = 1; ctx.font = "12px system-ui, sans-serif"; ctx.fillStyle = c.ink3;
+      for (const d of [0, 45, 90, 135, 180]) { ctx.beginPath(); ctx.moveTo(X(d), t); ctx.lineTo(X(d), h - b); ctx.stroke(); ctx.fillText(d + "°", X(d) - (d === 180 ? 26 : d ? 12 : 0), h - 6); }
+      const yt = top > 8 ? 5 : top > 3 ? 2 : top > 1.5 ? 1 : 0.5;
+      for (let s = 0; s <= top; s += yt) { ctx.beginPath(); ctx.moveTo(l, Y(s)); ctx.lineTo(w - r, Y(s)); ctx.stroke(); ctx.fillText(String(s), 6, Y(s) + 4); }
+      ctx.strokeStyle = c.ink2; ctx.lineWidth = 1.8; ctx.beginPath();
+      for (let i = 0; i <= 180; i++) { const a = i * Math.PI / 180, s = nrm(mul(A, [Math.cos(a), Math.sin(a)])); i ? ctx.lineTo(X(i), Y(s)) : ctx.moveTo(X(i), Y(s)); }
+      ctx.stroke();
+      const deg = v => ((Math.atan2(v[1], v[0]) * 180 / Math.PI) % 180 + 180) % 180;
+      [[S.v1, S.s1, c.s1], [S.v2, S.s2, c.s2]].forEach(([v, s, col]) => { ctx.fillStyle = col; ctx.beginPath(); ctx.arc(X(deg(v)), Y(s), 5, 0, 2 * Math.PI); ctx.fill(); });
+      ctx.strokeStyle = c.ink; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(X(deg(x)), Y(nrm(mul(A, x))), 6, 0, 2 * Math.PI); ctx.stroke(); }
+    readouts(x);
+  }
+  function readouts(x) {
+    const Ax = mul(A, x), cc = [dot(S.v1, x), dot(S.v2, x)], sc = [S.s1 * cc[0], S.s2 * cc[1]];
+    $("#xlabel").textContent = "x = " + vec(x);
+    $("#axlabel").textContent = vec(mul(stageMatrix(stage), x));
+    const cond = S.s2 > 0 ? (S.s1 / S.s2 < 1e6 ? f(S.s1 / S.s2, 2) : fmtExp(S.s1 / S.s2, 3)) : "∞ (rank one)";
+    $("#facts").innerHTML = `<dt>σ<sub>1</sub> (largest stretch)</dt><dd class="c1">${f(S.s1, 3)}</dd><dt>σ<sub>2</sub> (smallest stretch)</dt><dd class="c2">${f(S.s2, 3)}</dd>
+      <dt>‖<i>Ax</i>‖ for the current <i>x</i></dt><dd>${f(nrm(Ax), 3)}</dd><dt>cond(<i>A</i>) = σ<sub>1</sub>/σ<sub>2</sub></dt><dd>${cond}</dd>`;
+    $("#recipe").innerHTML =
+      `<span>directions</span><span><span class="c1"><i>v</i><sub>1</sub> = ${vec(S.v1, 3)}</span> &nbsp; <span class="c2"><i>v</i><sub>2</sub> = ${vec(S.v2, 3)}</span></span>` +
+      `<span>1. split</span><span>(<span class="c1"><i>v</i><sub>1</sub>·<i>x</i></span>, <span class="c2"><i>v</i><sub>2</sub>·<i>x</i></span>) = (<span class="c1">${f(cc[0], 3)}</span>, <span class="c2">${f(cc[1], 3)}</span>)</span>` +
+      `<span>2. stretch</span><span>(<span class="c1">σ<sub>1</sub><i>c</i><sub>1</sub></span>, <span class="c2">σ<sub>2</sub><i>c</i><sub>2</sub></span>) = (<span class="c1">${f(sc[0], 3)}</span>, <span class="c2">${f(sc[1], 3)}</span>)</span>` +
+      `<span>3. add</span><span><span class="c1">${f(sc[0], 3)} <i>u</i><sub>1</sub></span> + <span class="c2">${f(sc[1], 3)} <i>u</i><sub>2</sub></span> = ${vec(Ax, 3)}</span>` +
+      `<span>check</span><span><i>Ax</i> computed directly = ${vec(Ax, 3)}</span>` +
+      `<span>outputs</span><span><span class="c1"><i>u</i><sub>1</sub> = ${vec(S.u1, 3)}</span> &nbsp; <span class="c2"><i>u</i><sub>2</sub> = ${vec(S.u2, 3)}</span></span>`;
+    const n = $("#r1note");
+    if ($("#tR1").checked) { n.hidden = false;
+      n.innerHTML = `<span class="c3">Green</span>: <i>A</i><sub>1</sub> = σ<sub>1</sub><i>u</i><sub>1</sub><i>v</i><sub>1</sub><sup>T</sup> squashes the circle onto a segment. Its error on this <i>x</i> is ‖<i>Ax</i> − <i>A</i><sub>1</sub><i>x</i>‖ = |σ<sub>2</sub><i>c</i><sub>2</sub>| = <strong>${f(Math.abs(sc[1]), 3)}</strong>, never more than σ<sub>2</sub> = ${f(S.s2, 3)}. That is the 2-norm Eckart–Young bound, reached at <i>x</i> = ±<i>v</i><sub>2</sub>.`;
+    } else n.hidden = true;
+  }
+  const notes = ["Start: the unit circle, before <i>A</i> does anything.",
+    "<strong>Split</strong> (<i>V</i><sup>T</sup>): turn the plane so <i>v</i><sub>1</sub> and <i>v</i><sub>2</sub> lie along the axes. The coordinates are now the piece sizes <i>c</i><sub>1</sub>, <i>c</i><sub>2</sub>.",
+    "<strong>Stretch</strong> (&Sigma;): stretch the first coordinate by &sigma;<sub>1</sub> and the second by &sigma;<sub>2</sub>. Nothing mixes.",
+    "<strong>Full map</strong>: the circle has become an ellipse with half-axes &sigma;<sub>1</sub> and &sigma;<sub>2</sub>, along <i>u</i><sub>1</sub> and <i>u</i><sub>2</sub>."];
+  function setStage(t, speak) {
+    stage = Math.max(0, Math.min(3, t)); $("#stage").value = stage;
+    const k = Math.min(3, Math.max(0, Math.ceil(stage - 1e-3)));
+    let note = notes[k];
+    if (k === 3 && stage < 2.999) note = S.refl ? "<strong>Add</strong> (<i>U</i>): reflect, then turn the axes onto <i>u</i><sub>1</sub> and <i>u</i><sub>2</sub> (det <i>A</i> &lt; 0)." : "<strong>Add</strong> (<i>U</i>): turn the axes onto <i>u</i><sub>1</sub> and <i>u</i><sub>2</sub>. The pieces now add up to <i>Ax</i>.";
+    $("#stageNote").innerHTML = note;
+    $("#outTitle").innerHTML = ["Output: <i>x</i>", "Output: <i>V</i><sup>T</sup><i>x</i>", "Output: &Sigma;<i>V</i><sup>T</sup><i>x</i>", "Output: <i>U</i>&Sigma;<i>V</i><sup>T</sup><i>x</i> = <i>Ax</i>"][k];
+    $$("#steps button[data-s]").forEach(b => b.setAttribute("aria-pressed", String(Math.abs(+b.dataset.s - stage) < 0.01)));
+    draw();
+  }
+  function animateTo(target, dur) {
+    if (reduce) { setStage(target); return Promise.resolve(); }
+    const s0 = stage, t0 = performance.now();
+    return new Promise(res => { const tick = now => { const u = Math.min(1, (now - t0) / dur), e = u < .5 ? 2 * u * u : 1 - (-2 * u + 2) ** 2 / 2; setStage(s0 + (target - s0) * e); u < 1 ? requestAnimationFrame(tick) : res(); }; requestAnimationFrame(tick); });
+  }
+  async function play() {
+    if (playing) return; playing = true; $("#play").textContent = "Playing…";
+    setStage(0); await new Promise(r => setTimeout(r, reduce ? 0 : 500));
+    for (const s of [1, 2, 3]) { await animateTo(s, 1100); await new Promise(r => setTimeout(r, reduce ? 0 : 650)); }
+    playing = false; $("#play").textContent = "Play all";
+  }
+  function readMatrix() {
+    const v = inputs.map(i => parseFloat(i.value)); if (v.some(Number.isNaN)) return;
+    A = [[v[0], v[1]], [v[2], v[3]]]; S = svd2(A);
+    $$("#presets button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.m.split(",").map(Number).every((n, i) => n === v[i]))));
+    setStage(stage);
+  }
+  inputs.forEach(i => i.addEventListener("input", readMatrix));
+  $$("#presets button").forEach(b => b.addEventListener("click", () => { b.dataset.m.split(",").forEach((n, i) => inputs[i].value = n); readMatrix(); }));
+  $$("#steps button[data-s]").forEach(b => b.addEventListener("click", () => animateTo(+b.dataset.s, 700)));
+  $("#stage").addEventListener("input", e => setStage(+e.target.value));
+  $("#play").addEventListener("click", play);
+  $("#notesx").addEventListener("click", () => { theta = Math.atan2(3, 1); draw(); });
+  $("#tE").addEventListener("change", draw); $("#tR1").addEventListener("change", draw);
+  let dragging = false;
+  function pointAt(e) { const r = cin.getBoundingClientRect(), dx = e.clientX - r.left - r.width / 2, dy = -(e.clientY - r.top - r.height / 2);
+    if (Math.hypot(dx, dy) > 3) { theta = Math.atan2(dy, dx); draw(); } }
+  cin.addEventListener("pointerdown", e => { dragging = true; cin.setPointerCapture(e.pointerId); pointAt(e); });
+  cin.addEventListener("pointermove", e => { if (dragging) pointAt(e); });
+  cin.addEventListener("pointerup", () => dragging = false);
+  cin.addEventListener("keydown", e => { const d = e.shiftKey ? 15 : 2;
+    if (e.key === "ArrowLeft" || e.key === "ArrowUp") { theta += d * Math.PI / 180; draw(); e.preventDefault(); }
+    if (e.key === "ArrowRight" || e.key === "ArrowDown") { theta -= d * Math.PI / 180; draw(); e.preventDefault(); } });
+  new ResizeObserver(() => draw()).observe(document.body);
+  matchMedia("(prefers-color-scheme: dark)").addEventListener("change", draw);
+  readMatrix();
+})();
+</script>
+
+</main>
+<footer class="site">Interactive companion to the course notes. Every number on this page is computed live in your browser in IEEE double precision &mdash; the same arithmetic NumPy uses.</footer>
+</div>
+</body>
+</html>
