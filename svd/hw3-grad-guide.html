@@ -1,0 +1,400 @@
+<title>From Weyl to Eckart–Young</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@500;600;700&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&display=swap">
+<script>
+  window.MathJax = {
+    tex: { inlineMath: [["\\(", "\\)"]], displayMath: [["\\[", "\\]"]] },
+    svg: { fontCache: "global" },
+    options: { enableMenu: false }
+  };
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-svg.js" defer></script>
+<style>
+  /* Layout: one reading column (~68ch); interactive labs break out to a wider, framed panel. Course blues. */
+  :root {
+    --bg: #f6f8fb;
+    --surface: #ffffff;
+    --fg: #15202c;
+    --muted: #4b5a6b;
+    --rule: #d6dee8;
+    --accent: #1f4e79;
+    --accent-2: #2e75b6;
+    --tint: #ecf2f9;
+    --ok: #1d6b3a;
+    --ok-tint: #e5f3ea;
+    --bad: #a03b12;
+    --bar-a: #2e75b6;
+    --bar-b: #6c8fb3;
+    --bar-c: #1f4e79;
+    --font-body: "Source Serif 4", Georgia, "Times New Roman", serif;
+    --font-ui: "IBM Plex Sans", "Helvetica Neue", Arial, sans-serif;
+    --font-mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+    --step-0: 1.0625rem;
+    --step-1: 1.25rem;
+    --step-2: 1.6rem;
+    --step-3: 2.2rem;
+    --step--1: 0.9rem;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0f151d; --surface: #161f2a; --fg: #e4ebf3; --muted: #a2b2c4; --rule: #2a3747;
+      --accent: #9cc4ee; --accent-2: #7fb2e8; --tint: #1a2634; --ok: #6fd093; --ok-tint: #17301f;
+      --bad: #f0956b; --bar-a: #7fb2e8; --bar-b: #8aa3bd; --bar-c: #b9d6f5; color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0f151d; --surface: #161f2a; --fg: #e4ebf3; --muted: #a2b2c4; --rule: #2a3747;
+    --accent: #9cc4ee; --accent-2: #7fb2e8; --tint: #1a2634; --ok: #6fd093; --ok-tint: #17301f;
+    --bad: #f0956b; --bar-a: #7fb2e8; --bar-b: #8aa3bd; --bar-c: #b9d6f5; color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    background: var(--bg); color: var(--fg);
+    font-family: var(--font-body); font-size: var(--step-0); line-height: 1.6;
+  }
+  .page { max-width: 72rem; margin: 0 auto; padding-inline: 16px; padding-block: 2.5rem 4rem; }
+  .col { max-width: 44rem; margin-inline: auto; }
+  h1, h2, h3, .ui { font-family: var(--font-ui); }
+  h1 { font-size: var(--step-3); line-height: 1.15; margin: 0 0 .6rem; color: var(--accent); text-wrap: balance; letter-spacing: -0.01em; }
+  h2 { font-size: var(--step-2); line-height: 1.2; margin: 3.2rem 0 .8rem; color: var(--accent); text-wrap: balance; }
+  h3 { font-size: var(--step-1); margin: 2rem 0 .5rem; color: var(--fg); }
+  p { margin: 0 0 1rem; }
+  .kicker { font-family: var(--font-ui); font-size: var(--step--1); text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 0 0 .4rem; }
+  .lede { font-size: var(--step-1); color: var(--muted); }
+  a { color: var(--accent-2); }
+  mjx-container { max-width: 100%; overflow-x: auto; overflow-y: hidden; }
+
+  /* Route: the three parts of the problem, a real sequence */
+  .route { list-style: none; padding: 0; margin: 1.6rem 0 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr)); gap: .75rem; }
+  .route li { border-top: 3px solid var(--accent-2); padding: .7rem .2rem 0; min-width: 0; }
+  .route .tag { font-family: var(--font-ui); font-weight: 600; color: var(--accent); display: block; margin-bottom: .2rem; }
+  .route .what { font-size: var(--step--1); color: var(--muted); }
+
+  /* Toolbox facts */
+  .facts { display: grid; gap: 1rem; margin: 1.2rem 0; }
+  .fact { background: var(--surface); border: 1px solid var(--rule); border-radius: 6px; padding: 1rem 1.1rem; min-width: 0; }
+  .fact h3 { margin: 0 0 .3rem; font-size: 1.05rem; }
+  .fact h3 .code { font-family: var(--font-mono); font-weight: 500; color: var(--accent-2); margin-right: .4rem; }
+  .fact p:last-child { margin-bottom: 0; }
+
+  /* Hints */
+  details { border-left: 3px solid var(--rule); padding: .1rem 0 .1rem .9rem; margin: .6rem 0; }
+  details[open] { border-left-color: var(--accent-2); }
+  summary { cursor: pointer; font-family: var(--font-ui); font-weight: 600; font-size: var(--step--1); color: var(--accent-2); padding: .25rem 0; }
+  summary:focus-visible, button:focus-visible, select:focus-visible, input:focus-visible { outline: 3px solid var(--accent-2); outline-offset: 2px; border-radius: 3px; }
+  details > div { padding: .3rem 0 .4rem; }
+  .step { margin: 1.6rem 0; }
+  .step-label { font-family: var(--font-ui); font-weight: 700; color: var(--accent); }
+
+  /* Labs */
+  .lab { background: var(--surface); border: 1px solid var(--rule); border-radius: 8px; padding: 1.2rem; margin: 1.6rem 0; }
+  .lab-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: .5rem 1rem; margin-bottom: .8rem; }
+  .lab-head h3 { margin: 0; }
+  .lab-head .note { font-size: var(--step--1); color: var(--muted); }
+  .controls { display: flex; flex-wrap: wrap; gap: .6rem 1.2rem; align-items: center; margin-bottom: 1rem; font-family: var(--font-ui); font-size: var(--step--1); }
+  .controls label { display: inline-flex; align-items: center; gap: .4rem; }
+  select { font: inherit; padding: .3rem .5rem; border: 1px solid var(--rule); border-radius: 4px; background: var(--bg); color: var(--fg); }
+  button { font-family: var(--font-ui); font-size: var(--step--1); font-weight: 600; padding: .45rem .9rem; border-radius: 4px; border: 1px solid var(--accent-2); background: var(--accent-2); color: var(--surface); cursor: pointer; }
+  button.ghost { background: transparent; color: var(--accent-2); }
+  .table-wrap { overflow-x: auto; }
+  table { border-collapse: collapse; font-family: var(--font-mono); font-size: .88rem; font-variant-numeric: tabular-nums; min-width: 100%; }
+  th, td { padding: .35rem .6rem; text-align: right; border-bottom: 1px solid var(--rule); white-space: nowrap; }
+  th { font-family: var(--font-ui); font-weight: 600; color: var(--muted); }
+  th[scope="row"] { text-align: left; }
+  td.hl { background: var(--tint); color: var(--accent); font-weight: 500; outline: 2px solid var(--accent-2); outline-offset: -2px; }
+  td.ok { color: var(--ok); }
+  td.eq { color: var(--accent); }
+  .chain { margin-top: 1rem; display: grid; gap: .55rem; }
+  .bar-row { display: grid; grid-template-columns: minmax(9rem, 15rem) 1fr; gap: .8rem; align-items: center; min-width: 0; }
+  .bar-label { font-family: var(--font-ui); font-size: var(--step--1); min-width: 0; }
+  .bar-label .val { font-family: var(--font-mono); color: var(--muted); display: block; }
+  .track { height: 14px; background: var(--tint); border-radius: 3px; position: relative; min-width: 0; }
+  .fill { height: 100%; border-radius: 3px; }
+  .verdict { margin-top: .9rem; font-family: var(--font-ui); font-size: var(--step--1); padding: .5rem .7rem; border-radius: 4px; background: var(--ok-tint); color: var(--ok); }
+  .sums { display: grid; grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr)); gap: .8rem; margin-top: 1rem; }
+  .sum { border-top: 2px solid var(--rule); padding-top: .5rem; min-width: 0; }
+  .sum .lbl { font-family: var(--font-ui); font-size: var(--step--1); color: var(--muted); }
+  .sum .num { font-family: var(--font-mono); font-size: 1.25rem; }
+
+  .checklist { padding-left: 1.2rem; }
+  .checklist li { margin-bottom: .4rem; }
+  .pitfall { border-left: 3px solid var(--bad); padding-left: .9rem; margin: 1rem 0; }
+  .pitfall strong { font-family: var(--font-ui); color: var(--bad); }
+  footer { margin-top: 3rem; font-size: var(--step--1); color: var(--muted); }
+  .sr { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+  .past { font-family: var(--font-ui); font-size: .75rem; color: var(--muted); }
+  @media (prefers-reduced-motion: no-preference) { .fill { transition: width .35s ease; } }
+  @media (max-width: 30rem) { .bar-row { grid-template-columns: 1fr; gap: .25rem; } }
+</style>
+
+<div class="page">
+<header class="col">
+  <p class="kicker">MATH/CCM 572 · Homework 3 · Graduate Extension</p>
+  <h1>From Weyl to Eckart–Young</h1>
+  <p class="lede">A guided walk through the starred problem: proving that keeping the first \(k\) SVD layers is also the best rank-\(k\) approximation in the Frobenius norm.</p>
+  <p>You already know the 2-norm version of Eckart–Young. Its proof finds a single vector \(w\) that any rank-\(k\) competitor misses, which controls only the largest singular value of the error. The Frobenius norm adds up the squares of <em>all</em> the singular values, so we need a statement about every \(\sigma_i\) at once. That is the new tool, <em>Weyl's inequality</em>, and after it the proof takes two short steps. This page gives you the facts you will use, lets you test each inequality on real matrices, and offers hints in stages. It does not give the full write-up; that is your job.</p>
+  <ol class="route" aria-label="The three parts of the problem">
+    <li><span class="tag">Part (a)</span><span class="what">Prove Weyl's inequality \(\sigma_{i+j-1}(X+Y)\le\sigma_i(X)+\sigma_j(Y)\).</span></li>
+    <li><span class="tag">Part (b)</span><span class="what">Use it to compare the singular values of \(A\) and \(A-B\), shifted by \(k\).</span></li>
+    <li><span class="tag">Part (c)</span><span class="what">Square and add to get the Frobenius statement.</span></li>
+  </ol>
+</header>
+
+<main>
+<section class="col" aria-labelledby="toolbox">
+  <h2 id="toolbox">The facts you will use</h2>
+  <p>Every step of the proof is one of these facts applied once. If a step feels stuck, come back here and ask which fact it needs. Throughout, \(\sigma_i(M)\) is the \(i\)-th singular value of \(M\), and \(M_k=\sigma_1u_1v_1^T+\cdots+\sigma_ku_kv_k^T\) keeps the first \(k\) layers.</p>
+  <div class="facts">
+    <article class="fact">
+      <h3><span class="code">F1</span>The min form of Eckart–Young</h3>
+      <p>\[\sigma_{k+1}(M)=\min_{\operatorname{rank}(B)\le k}\|M-B\|_2 .\]</p>
+      <p>This is the 2-norm theorem from the notes in one line: every \(B\) of rank at most \(k\) has \(\|M-B\|_2\ge\sigma_{k+1}\), and \(B=M_k\) achieves it. In words: \(\sigma_{k+1}(M)\) is the distance from \(M\) to the nearest matrix of rank at most \(k\). The useful consequence is an <strong>upper bound</strong>: for <em>any</em> particular \(B\) of rank at most \(k\),</p>
+      <p>\[\sigma_{k+1}(M)\le\|M-B\|_2 .\]</p>
+      <p>The smallest value is no bigger than any one value. You never need to find the minimizer; one good choice of \(B\) is enough.</p>
+    </article>
+    <article class="fact">
+      <h3><span class="code">F2</span>What truncation costs</h3>
+      <p>\[\|M-M_k\|_2=\sigma_{k+1}(M).\]</p>
+      <p>The leftover \(M-M_k=\sigma_{k+1}u_{k+1}v_{k+1}^T+\cdots\) is itself an SVD, and its largest stretch is its largest singular value. With \(k=0\), \(M_0=0\) and this says \(\|M\|_2=\sigma_1(M)\).</p>
+    </article>
+    <article class="fact">
+      <h3><span class="code">F3</span>Rank adds at most</h3>
+      <p>\[\operatorname{rank}(P+Q)\le\operatorname{rank}(P)+\operatorname{rank}(Q).\]</p>
+      <p>Every column of \(P+Q\) is a column of \(P\) plus a column of \(Q\), so it lies in \(C(P)+C(Q)\), a space of dimension at most \(\operatorname{rank}P+\operatorname{rank}Q\). Also, \(M_k\) is a sum of \(k\) rank-one layers, so \(\operatorname{rank}(M_k)\le k\).</p>
+    </article>
+    <article class="fact">
+      <h3><span class="code">F4</span>Frobenius norm from singular values</h3>
+      <p>\[\|M\|_F^2=\sigma_1(M)^2+\sigma_2(M)^2+\cdots .\]</p>
+      <p>Multiplying by orthonormal \(U\) and \(V^T\) does not change the sum of squared entries, so \(\|M\|_F^2=\|\Sigma\|_F^2\).</p>
+    </article>
+    <article class="fact">
+      <h3><span class="code">F5</span>Zero past the rank</h3>
+      <p>If \(M\) has rank \(r\), we set \(\sigma_i(M)=0\) for \(i>r\). So a matrix of rank at most \(k\) has \(\sigma_{k+1}=0\). With this convention F1 and F2 still hold for every \(k\).</p>
+    </article>
+  </div>
+</section>
+
+<section aria-labelledby="weyl">
+  <div class="col">
+    <h2 id="weyl">Part (a): Weyl's inequality</h2>
+    <p>For matrices \(X\) and \(Y\) of the same shape, and any \(i,j\ge1\):</p>
+    <p>\[\sigma_{i+j-1}(X+Y)\ \le\ \sigma_i(X)+\sigma_j(Y).\]</p>
+    <p><strong>What it says.</strong> Start with the simplest case, \(i=j=1\): \(\sigma_1(X+Y)\le\sigma_1(X)+\sigma_1(Y)\). Since \(\sigma_1\) is the 2-norm, that is just the triangle inequality \(\|X+Y\|_2\le\|X\|_2+\|Y\|_2\). Weyl's inequality extends this to the other singular values: adding \(Y\) can raise singular values, but in a controlled way. Taking \(j=1\) gives \(\sigma_i(X+Y)\le\sigma_i(X)+\|Y\|_2\): no singular value moves up by more than \(\|Y\|_2\).</p>
+    <p><strong>The plan of the proof</strong> is a chain of three comparisons, with \(B=X_{i-1}+Y_{j-1}\):</p>
+    <p>\[\begin{aligned}\sigma_{i+j-1}(X+Y)\ &\overset{\text{(ii)}}{\le}\ \|X+Y-B\|_2\\ &\overset{\text{(iii)}}{\le}\ \sigma_i(X)+\sigma_j(Y),\end{aligned}\]</p>
+    <p>and step (i) checks that \(B\) is allowed in the first comparison. The lab below computes all three numbers for random matrices, so you can watch the chain hold before you prove it.</p>
+  </div>
+
+  <div class="lab" role="region" aria-labelledby="lab1-title">
+    <div class="lab-head">
+      <h3 id="lab1-title">Lab 1: test the chain</h3>
+      <span class="note">Random 4 × 4 matrices. Singular values past the rank count as 0.</span>
+    </div>
+    <div class="controls">
+      <label for="wi">\(i\) <select id="wi"><option>1</option><option selected>2</option><option>3</option><option>4</option></select></label>
+      <label for="wj">\(j\) <select id="wj"><option>1</option><option selected>2</option><option>3</option><option>4</option></select></label>
+      <label for="wsmall"><input type="checkbox" id="wsmall"> Make \(Y\) small (scale by 0.1)</label>
+      <button type="button" id="wnew">New random \(X\) and \(Y\)</button>
+    </div>
+    <div class="table-wrap">
+      <table aria-describedby="lab1-title">
+        <thead><tr><th scope="col">Singular values</th><th scope="col">σ<sub>1</sub></th><th scope="col">σ<sub>2</sub></th><th scope="col">σ<sub>3</sub></th><th scope="col">σ<sub>4</sub></th></tr></thead>
+        <tbody id="wtable"></tbody>
+      </table>
+    </div>
+    <div class="chain" id="wchain" aria-live="polite"></div>
+    <div class="verdict" id="wverdict" aria-live="polite"></div>
+  </div>
+
+  <div class="col">
+    <p>Try a few settings. Does the middle bar ever fall below the first or rise above the third? What happens when \(i+j-1>4\)? What changes when \(Y\) is small?</p>
+
+    <h3>Building the proof</h3>
+    <div class="step">
+      <p><span class="step-label">Warm-up.</span> Check that \(i=j=1\) is the triangle inequality. Which fact turns \(\sigma_1\) into a norm?</p>
+      <details><summary>Hint</summary><div><p>F2 with \(k=0\): \(\|M\|_2=\sigma_1(M)\).</p></div></details>
+    </div>
+    <div class="step">
+      <p><span class="step-label">(i)</span> Explain why \(B=X_{i-1}+Y_{j-1}\) has rank at most \(i+j-2\).</p>
+      <details><summary>Hint 1</summary><div><p>\(X_{i-1}\) is a sum of how many rank-one layers? What is its rank, at most?</p></div></details>
+      <details><summary>Hint 2</summary><div><p>Combine \(\operatorname{rank}X_{i-1}\le i-1\) and \(\operatorname{rank}Y_{j-1}\le j-1\) with F3.</p></div></details>
+    </div>
+    <div class="step">
+      <p><span class="step-label">(ii)</span> Use the min form to show \(\sigma_{i+j-1}(X+Y)\le\|X+Y-B\|_2\).</p>
+      <details><summary>Hint 1</summary><div><p>Apply F1 to the matrix \(M=X+Y\). Which value of \(k\) makes \(\sigma_{k+1}\) equal to \(\sigma_{i+j-1}\)?</p></div></details>
+      <details><summary>Hint 2</summary><div><p>With \(k=i+j-2\), F1 says \(\sigma_{i+j-1}(X+Y)\) is the smallest distance from \(X+Y\) to a matrix of rank at most \(i+j-2\). Step (i) says \(B\) is one of those matrices. The smallest distance is at most the distance to \(B\).</p></div></details>
+    </div>
+    <div class="step">
+      <p><span class="step-label">(iii)</span> Split \(X+Y-B\) into two pieces and finish with the triangle inequality and F2.</p>
+      <details><summary>Hint 1</summary><div><p>\(X+Y-B=(X-X_{i-1})+(Y-Y_{j-1})\).</p></div></details>
+      <details><summary>Hint 2</summary><div><p>Each piece is a truncation error. F2 with \(k=i-1\) gives \(\|X-X_{i-1}\|_2=\sigma_i(X)\); do the same for \(Y\).</p></div></details>
+      <details><summary>Edge cases</summary><div><p>If \(i=1\), then \(X_0=0\) and the piece is \(X\) itself, with \(\|X\|_2=\sigma_1(X)\). If \(i-1\) is at least the rank of \(X\), then \(X_{i-1}=X\) and \(\sigma_i(X)=0\) by F5; the piece is zero and the step still holds. Say this in one sentence in your write-up.</p></div></details>
+    </div>
+  </div>
+</section>
+
+<section aria-labelledby="shift">
+  <div class="col">
+    <h2 id="shift">Part (b): shifting by \(k\)</h2>
+    <p>Now let \(B\) be any matrix of rank at most \(k\), the competitor we want to beat. Apply Weyl's inequality with \(X=A-B\), \(Y=B\) and \(j=k+1\). Then \(X+Y=A\), and the claim is</p>
+    <p>\[\sigma_{i+k}(A)\ \le\ \sigma_i(A-B)\qquad\text{for every } i\ge1 .\]</p>
+    <p>Read it as: the error matrix \(A-B\) has singular values at least as large as those of \(A\), once you skip the first \(k\) of \(A\)'s. A rank-\(k\) matrix can absorb at most \(k\) of \(A\)'s singular values; the rest show up in the error.</p>
+  </div>
+
+  <div class="lab" role="region" aria-labelledby="lab2-title">
+    <div class="lab-head">
+      <h3 id="lab2-title">Lab 2: the shifted comparison</h3>
+      <span class="note">A random 6 × 4 matrix \(A\) and a competitor \(B\) of rank \(k\). A has only 4 singular values; entries marked “past the size” count as 0.</span>
+    </div>
+    <div class="controls">
+      <label for="sk">\(k\) <select id="sk"><option selected>1</option><option>2</option><option>3</option></select></label>
+      <label for="sbest"><input type="checkbox" id="sbest"> Use the best competitor, \(B=A_k\)</label>
+      <button type="button" id="snewB">New random \(B\)</button>
+      <button type="button" class="ghost" id="snewA">New random \(A\)</button>
+    </div>
+    <div class="table-wrap">
+      <table aria-describedby="lab2-title">
+        <thead><tr><th scope="col"><i>i</i></th><th scope="col">σ<sub>i+k</sub>(A)</th><th scope="col">σ<sub>i</sub>(A − B)</th><th scope="col">Comparison</th></tr></thead>
+        <tbody id="stable"></tbody>
+      </table>
+    </div>
+    <div class="sums" aria-live="polite">
+      <div class="sum"><div class="lbl">Sum of squares of σ<sub>i</sub>(A − B) = ‖A − B‖²<sub>F</sub></div><div class="num" id="sumL"></div></div>
+      <div class="sum"><div class="lbl">Sum of squares of σ<sub>i+k</sub>(A) = ‖A − A<sub>k</sub>‖²<sub>F</sub></div><div class="num" id="sumR"></div></div>
+    </div>
+  </div>
+
+  <div class="col">
+    <p>Switch on the best competitor. Which rows become equalities? Why must they?</p>
+    <div class="step">
+      <p><span class="step-label">Part (b)</span></p>
+      <details><summary>Hint 1</summary><div><p>With \(j=k+1\), the left index in Weyl's inequality is \(i+(k+1)-1\). Simplify it.</p></div></details>
+      <details><summary>Hint 2</summary><div><p>Weyl gives \(\sigma_{i+k}(A)\le\sigma_i(A-B)+\sigma_{k+1}(B)\). Why is the last term zero? (F5.)</p></div></details>
+    </div>
+  </div>
+</section>
+
+<section class="col" aria-labelledby="sum">
+  <h2 id="sum">Part (c): square and add</h2>
+  <p>Part (b) compares the two columns of the table row by row. Part (c) adds up the squares, which is what the two totals under the table do.</p>
+  <div class="step">
+    <details><summary>Hint 1</summary><div><p>Both sides of (b) are nonnegative, so you may square them. Then sum over \(i=1,2,\ldots\)</p></div></details>
+    <details><summary>Hint 2</summary><div><p>By F4 the left sum is \(\|A-B\|_F^2\). The right sum is \(\sigma_{k+1}^2+\sigma_{k+2}^2+\cdots\), which is \(\|A-A_k\|_F^2\) by F4 applied to \(A-A_k\) (its singular values are \(\sigma_{k+1},\sigma_{k+2},\ldots\)).</p></div></details>
+  </div>
+
+  <h2 id="writeup">Before you hand it in</h2>
+  <ul class="checklist">
+    <li>Every \(\le\) and \(=\) in your proof names the fact it uses (F1–F5, or the triangle inequality).</li>
+    <li>Part (a) says where the rank bound from (i) is used.</li>
+    <li>Part (a) handles \(i=1\) and \(i-1\ge\operatorname{rank}X\) in a sentence.</li>
+    <li>Part (b) says why \(\sigma_{k+1}(B)=0\).</li>
+    <li>Part (c) says where the Frobenius formula F4 is used, on both sides.</li>
+  </ul>
+  <div class="pitfall"><p><strong>Common trap.</strong> In step (ii), trying to show that \(B\) is the closest rank-\((i+j-2)\) matrix to \(X+Y\). It usually is not, and you do not need it to be. F1 gives an upper bound for any \(B\) of the right rank.</p></div>
+  <div class="pitfall"><p><strong>Common trap.</strong> In part (b), applying Weyl with \(X=A\) and \(Y=-B\). That bounds the singular values of \(A-B\) from above, the wrong direction. Put the unknown error \(A-B\) in the role of \(X\).</p></div>
+  <footer><p>Numbers in the labs are computed in your browser from random matrices. Different runs give different values; the inequalities hold every time.</p></footer>
+</section>
+</main>
+</div>
+
+<script>
+(function () {
+  "use strict";
+  // ---------- small linear algebra ----------
+  let seed = 572;
+  function rand() { // mulberry32
+    seed |= 0; seed = (seed + 0x6D2B79F5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  }
+  function randn() { let u = 0, v = 0; while (u === 0) u = rand(); v = rand(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v); }
+  function randMat(m, n, s) { const M = []; for (let r = 0; r < m; r++) { M.push([]); for (let c = 0; c < n; c++) M[r].push((s || 1) * randn()); } return M; }
+  function mul(A, B) { const m = A.length, n = B[0].length, p = B.length, C = []; for (let r = 0; r < m; r++) { C.push(new Array(n).fill(0)); for (let k = 0; k < p; k++) { const a = A[r][k]; for (let c = 0; c < n; c++) C[r][c] += a * B[k][c]; } } return C; }
+  function T(A) { return A[0].map((_, c) => A.map(row => row[c])); }
+  function add(A, B, s) { s = s === undefined ? 1 : s; return A.map((row, r) => row.map((x, c) => x + s * B[r][c])); }
+  function fro2(A) { let s = 0; A.forEach(row => row.forEach(x => { s += x * x; })); return s; }
+
+  function jacobiEig(S) { // symmetric n x n -> {vals, vecs (columns)}
+    const n = S.length; const a = S.map(r => r.slice()); const V = []; for (let i = 0; i < n; i++) { V.push(new Array(n).fill(0)); V[i][i] = 1; }
+    for (let sweep = 0; sweep < 100; sweep++) {
+      let off = 0; for (let p = 0; p < n; p++) for (let q = p + 1; q < n; q++) off += a[p][q] * a[p][q];
+      if (off < 1e-22) break;
+      for (let p = 0; p < n; p++) for (let q = p + 1; q < n; q++) {
+        if (Math.abs(a[p][q]) < 1e-300) continue;
+        const theta = (a[q][q] - a[p][p]) / (2 * a[p][q]);
+        const t = Math.sign(theta || 1) / (Math.abs(theta) + Math.sqrt(theta * theta + 1));
+        const c = 1 / Math.sqrt(t * t + 1), s = t * c;
+        for (let k = 0; k < n; k++) { const akp = a[k][p], akq = a[k][q]; a[k][p] = c * akp - s * akq; a[k][q] = s * akp + c * akq; }
+        for (let k = 0; k < n; k++) { const apk = a[p][k], aqk = a[q][k]; a[p][k] = c * apk - s * aqk; a[q][k] = s * apk + c * aqk; }
+        for (let k = 0; k < n; k++) { const vkp = V[k][p], vkq = V[k][q]; V[k][p] = c * vkp - s * vkq; V[k][q] = s * vkp + c * vkq; }
+      }
+    }
+    return { vals: a.map((r, i) => r[i]), vecs: V };
+  }
+  function svd(M) { // returns {s (desc), U cols, V cols}, n = columns
+    const n = M[0].length; const e = jacobiEig(mul(T(M), M));
+    const idx = e.vals.map((v, i) => i).sort((x, y) => e.vals[y] - e.vals[x]);
+    const s = [], Vc = [], Uc = [];
+    idx.forEach(i => {
+      const sig = Math.sqrt(Math.max(e.vals[i], 0)); const v = e.vecs.map(row => row[i]);
+      s.push(sig); Vc.push(v);
+      const Mv = M.map(row => row.reduce((acc, x, k) => acc + x * v[k], 0));
+      Uc.push(sig > 1e-12 ? Mv.map(x => x / sig) : Mv.map(() => 0));
+    });
+    return { s, U: Uc, V: Vc };
+  }
+  function trunc(M, k) { const d = svd(M); const m = M.length, n = M[0].length; const R = []; for (let r = 0; r < m; r++) R.push(new Array(n).fill(0)); for (let l = 0; l < k && l < d.s.length; l++) for (let r = 0; r < m; r++) for (let c = 0; c < n; c++) R[r][c] += d.s[l] * d.U[l][r] * d.V[l][c]; return R; }
+  function sv(M, i) { const s = svd(M).s; return i <= s.length ? s[i - 1] : 0; } // 1-based, zero past size
+  function cleanS(M) { return svd(M).s.map(x => (x < 1e-9 ? 0 : x)); }
+  const f = x => x.toFixed(3);
+
+  // ---------- Lab 1: Weyl ----------
+  const n = 4; let X, Y0;
+  const wi = document.getElementById("wi"), wj = document.getElementById("wj"), wsmall = document.getElementById("wsmall");
+  function newXY() { X = randMat(n, n); Y0 = randMat(n, n); renderW(); }
+  function renderW() {
+    const i = +wi.value, j = +wj.value, Y = wsmall.checked ? Y0.map(r => r.map(x => 0.1 * x)) : Y0;
+    const S = add(X, Y), sX = cleanS(X), sY = cleanS(Y), sS = cleanS(S), idx = i + j - 1;
+    const row = (name, arr, hl) => "<tr><th scope=\"row\">" + name + "</th>" + arr.map((x, c) => "<td" + (c + 1 === hl ? " class=\"hl\"" : "") + ">" + f(x) + (c + 1 === hl ? "<span class=\"sr\"> (used in the chain)</span>" : "") + "</td>").join("") + "</tr>";
+    document.getElementById("wtable").innerHTML = row("X", sX, i) + row("Y", sY, j) + row("X + Y", sS, idx <= n ? idx : 0);
+    const B = add(trunc(X, i - 1), trunc(Y, j - 1));
+    const a = idx <= n ? sS[idx - 1] : 0, b = svd(add(S, B, -1)).s[0], c = (sX[i - 1] || 0) + (sY[j - 1] || 0);
+    const max = Math.max(a, b, c, 1e-9);
+    const bar = (label, val, col) => "<div class=\"bar-row\"><div class=\"bar-label\">" + label + "<span class=\"val\">" + f(val) + "</span></div><div class=\"track\" role=\"img\" aria-label=\"" + label.replace(/<[^>]+>/g, "") + " equals " + f(val) + "\"><div class=\"fill\" style=\"width:" + (100 * val / max).toFixed(1) + "%;background:" + col + "\"></div></div></div>";
+    document.getElementById("wchain").innerHTML =
+      bar("σ<sub>" + idx + "</sub>(X + Y)", a, "var(--bar-a)") +
+      bar("‖X + Y − B‖₂, with B = X<sub>" + (i - 1) + "</sub> + Y<sub>" + (j - 1) + "</sub>", b, "var(--bar-b)") +
+      bar("σ<sub>" + i + "</sub>(X) + σ<sub>" + j + "</sub>(Y)", c, "var(--bar-c)");
+    const ok = a <= b + 1e-9 && b <= c + 1e-9;
+    document.getElementById("wverdict").textContent = (ok ? "The chain holds: " : "Check: ") + f(a) + " ≤ " + f(b) + " ≤ " + f(c) + (idx > n ? "  (σ" + idx + " of a 4 × 4 matrix is 0 by convention)" : "") + (Math.abs(b - c) < 1e-6 ? ". Here step (iii) is an equality." : ".");
+  }
+  [wi, wj, wsmall].forEach(el => el.addEventListener("change", renderW));
+  document.getElementById("wnew").addEventListener("click", newXY);
+
+  // ---------- Lab 2: shift ----------
+  let A, Bf = {};
+  const sk = document.getElementById("sk"), sbest = document.getElementById("sbest");
+  function newA() { A = randMat(6, 4); Bf = {}; newB(); }
+  function newB() { for (let k = 1; k <= 3; k++) Bf[k] = mul(randMat(6, k), randMat(k, 4)); renderS(); }
+  function renderS() {
+    const k = +sk.value; const B = sbest.checked ? trunc(A, k) : Bf[k];
+    const sA = cleanS(A), sE = cleanS(add(A, B, -1)); let rows = "", L = 0, R = 0;
+    for (let i = 1; i <= 4; i++) {
+      const left = i + k <= 4 ? sA[i + k - 1] : 0, right = sE[i - 1]; L += right * right; R += left * left;
+      const eq = Math.abs(left - right) < 1e-6;
+      rows += "<tr><td>" + i + "</td><td>" + f(left) + (i + k > 4 ? " <span class=\"past\">past the size</span>" : "") + "</td><td>" + f(right) + "</td><td class=\"" + (eq ? "eq" : "ok") + "\">" + (left <= right + 1e-9 ? (eq ? "equal" : "≤ holds") : "fails") + "</td></tr>";
+    }
+    document.getElementById("stable").innerHTML = rows;
+    document.getElementById("sumL").textContent = f(L);
+    document.getElementById("sumR").textContent = f(R);
+  }
+  [sk, sbest].forEach(el => el.addEventListener("change", renderS));
+  document.getElementById("snewB").addEventListener("click", () => { sbest.checked = false; newB(); });
+  document.getElementById("snewA").addEventListener("click", newA);
+
+  newXY(); newA();
+})();
+</script>
