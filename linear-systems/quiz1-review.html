@@ -426,7 +426,12 @@ const a = (href, text) => `<a href="${href}" target="_blank" rel="noopener">${te
 const n2 = s => a(NOTES2, `Notes Part 2 (Norms and Condition Numbers), “${s}”`);
 const n3 = s => a(NOTES3, `Notes Part 3 (Least Squares and QR), “${s}”`);
 const ex = (page, id, s) => a(EXP + page + '#' + id, `the ${s} explorer`);
-const ws = s => `the <em>${s}</em> worksheet`;
+const WS = {
+  'Norms and Condition Numbers': 'https://canvas.umd.umich.edu/courses/552074/files/46373897?wrap=1',
+  'Least Squares by the Normal Equations': 'https://canvas.umd.umich.edu/courses/552074/files/46373895?wrap=1',
+  'Least Squares by QR': 'https://canvas.umd.umich.edu/courses/552074/files/46373899?wrap=1'
+};
+const ws = s => a(WS[s], `the <em>${s}</em> worksheet`);
 const see = (...items) => `<span class="see">Review: ${items.join('; ')}.</span>`;
 
 /* ---------- Question bank ---------- */
