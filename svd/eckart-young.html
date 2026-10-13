@@ -1,0 +1,931 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Eckart–Young in the 2-Norm</title>
+<meta name="description" content="Why truncating the SVD gives the best rank-k approximation: a two-step proof of the Eckart-Young theorem, then live examples of each step.">
+<style>
+:root {
+  color-scheme: light;
+  --bg: #fcfcfb;
+  --surface: #f3f2ef;
+  --ink: #111110;
+  --ink-2: #4a4946;
+  --ink-3: #6b6a66;
+  --rule: #d9d7d1;
+  --accent: #1f64b8;
+  --s1: #2a78d6;      /* blue: active row / series 1 */
+  --s2: #c9501f;      /* orange: pivot / series 2 */
+  --s3: #13875e;      /* aqua-green: L entries / series 3 */
+  --t1: #dbe8f8;      /* tints for cell highlights */
+  --t2: #fbe1d4;
+  --t3: #d5efe3;
+  --t4: #f5ecc8;
+  --focus: #1f64b8;
+  --maxw: 60rem;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #1a1a19;
+    --surface: #242422;
+    --ink: #f4f3ef;
+    --ink-2: #c3c2b7;
+    --ink-3: #a3a29a;
+    --rule: #3d3c39;
+    --accent: #7fb2f0;
+    --s1: #5a9cec;
+    --s2: #f08a5d;
+    --s3: #3cc392;
+    --t1: #1e3450;
+    --t2: #4a2a1b;
+    --t3: #173d2f;
+    --t4: #423a17;
+    --focus: #7fb2f0;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #1a1a19; --surface: #242422; --ink: #f4f3ef; --ink-2: #c3c2b7; --ink-3: #a3a29a;
+  --rule: #3d3c39; --accent: #7fb2f0; --s1: #5a9cec; --s2: #f08a5d; --s3: #3cc392;
+  --t1: #1e3450; --t2: #4a2a1b; --t3: #173d2f; --t4: #423a17; --focus: #7fb2f0;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html { background: var(--bg); }
+body {
+  margin: 0; background: var(--bg); color: var(--ink);
+  font: 17px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+.wrap { max-width: var(--maxw); margin: 0 auto; padding: 1.5rem 16px 4rem; }
+header.site { border-bottom: 1px solid var(--rule); margin-bottom: 2rem; padding-bottom: 1rem; }
+header.site .crumb { font-size: .9rem; color: var(--ink-3); margin: 0 0 .25rem; }
+header.site .crumb a { color: var(--ink-3); }
+h1 { font-size: 1.9rem; line-height: 1.2; margin: 0 0 .5rem; letter-spacing: -.01em; }
+h2 { font-size: 1.35rem; margin: 3rem 0 .5rem; line-height: 1.3; }
+h3 { font-size: 1.1rem; margin: 1.75rem 0 .4rem; }
+p { margin: .6rem 0; }
+.lede { font-size: 1.08rem; color: var(--ink-2); max-width: 44rem; }
+.muted { color: var(--ink-3); }
+a { color: var(--accent); }
+:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; border-radius: 3px; }
+.skip { position: absolute; left: -9999px; }
+.skip:focus { left: 1rem; top: 1rem; background: var(--bg); padding: .5rem; z-index: 10; }
+.panel { background: var(--surface); border-radius: 10px; padding: 1rem 1.1rem; margin: 1rem 0; overflow-x: auto; }
+.row { display: flex; flex-wrap: wrap; gap: 1.25rem; align-items: flex-start; }
+.col { flex: 1 1 18rem; min-width: 0; }
+.controls { display: flex; flex-wrap: wrap; gap: .5rem .75rem; align-items: center; margin: .75rem 0; }
+button, select, input[type=number], input[type=text] {
+  font: inherit; font-size: .95rem; color: var(--ink); background: var(--bg);
+  border: 1px solid var(--rule); border-radius: 7px; padding: .35rem .75rem; min-height: 2.25rem;
+}
+button { cursor: pointer; }
+button:hover:not(:disabled) { border-color: var(--ink-3); }
+button:disabled { opacity: .45; cursor: default; }
+button.primary { background: var(--accent); color: var(--bg); border-color: var(--accent); }
+input[type=number] { width: 5.5rem; }
+input[type=range] { accent-color: var(--accent); width: min(18rem, 100%); }
+label { font-size: .95rem; }
+.narr {
+  min-height: 4.5rem; border-left: 3px solid var(--accent); padding: .35rem .9rem; margin: .75rem 0;
+  background: var(--bg); border-radius: 0 6px 6px 0;
+}
+.narr strong { color: var(--ink); }
+.stepcount { font-size: .88rem; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.readout { font-variant-numeric: tabular-nums; }
+.readout dt { color: var(--ink-3); font-size: .88rem; }
+.readout dd { margin: 0 0 .5rem; font-size: 1.05rem; }
+.kv { display: grid; grid-template-columns: minmax(7rem, 48%) minmax(0, 1fr); gap: .15rem 1rem; font-variant-numeric: tabular-nums; }
+.kv > :nth-child(odd) { color: var(--ink-3); }
+.mono, code { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: .92em; }
+.math { font-family: "Cambria Math", "STIX Two Math", "Latin Modern Math", Georgia, serif; font-style: normal; }
+.math i, i.v { font-style: italic; }
+/* matrices */
+.mats { display: flex; flex-wrap: wrap; gap: 1rem 1.5rem; align-items: center; margin: .75rem 0; }
+.matwrap { display: inline-flex; flex-direction: column; align-items: center; gap: .2rem; }
+.matwrap .cap { font-size: .9rem; color: var(--ink-3); }
+table.mat { border-collapse: separate; border-spacing: 2px; position: relative; padding: 0 6px;
+  font-variant-numeric: tabular-nums; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: .92rem; }
+table.mat::before, table.mat::after { content: ""; position: absolute; top: 0; bottom: 0; width: 6px;
+  border: 1.5px solid var(--ink-2); }
+table.mat::before { left: 0; border-right: none; }
+table.mat::after { right: 0; border-left: none; }
+table.mat td { padding: .2rem .5rem; text-align: right; min-width: 3.2rem; border-radius: 4px;
+  transition: background-color .25s; }
+table.mat td.pivot { background: var(--t2); outline: 2px solid var(--s2); }
+table.mat td.hlrow { background: var(--t1); }
+table.mat td.src { background: var(--t4); }
+table.mat td.newL { background: var(--t3); outline: 2px solid var(--s3); }
+table.mat td.zeroed { color: var(--ink-3); }
+table.mat td.dim { color: var(--ink-3); opacity: .55; }
+table.mat td.done { background: var(--t3); }
+.op { font-size: 1.3rem; color: var(--ink-3); }
+/* legend chips */
+.legend { display: flex; flex-wrap: wrap; gap: .4rem 1rem; font-size: .88rem; color: var(--ink-2); margin: .25rem 0; }
+.chip { display: inline-block; width: .9rem; height: .9rem; border-radius: 3px; vertical-align: -2px; margin-right: .3rem; }
+/* svg */
+svg.plot { width: 100%; height: auto; display: block; overflow: visible; }
+svg.plot text { fill: var(--ink-2); font: 12px system-ui, sans-serif; }
+svg.plot .axis { stroke: var(--ink-3); stroke-width: 1; }
+svg.plot .grid { stroke: var(--rule); stroke-width: 1; }
+.fig { margin: .75rem 0; }
+.figcap { font-size: .9rem; color: var(--ink-3); margin-top: .35rem; }
+details { margin: .75rem 0; }
+summary { cursor: pointer; color: var(--accent); }
+.predict { background: var(--t4); border-radius: 8px; padding: .5rem .8rem; margin: .5rem 0; }
+.good { color: var(--s3); font-weight: 600; }
+.bad { color: var(--s2); font-weight: 600; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+nav.toc { font-size: .95rem; }
+nav.toc ol { padding-left: 1.2rem; margin: .25rem 0; }
+footer.site { margin-top: 4rem; padding-top: 1rem; border-top: 1px solid var(--rule); font-size: .88rem; color: var(--ink-3); }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+@media (max-width: 560px) { body { font-size: 16px; } h1 { font-size: 1.55rem; } table.mat td { min-width: 2.4rem; padding: .15rem .3rem; } }
+/* SVD explorers */
+canvas.plane { width: 100%; aspect-ratio: 1 / 1; display: block; touch-action: none; border-radius: 6px; background: var(--bg); }
+canvas.plane:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+.imgs { display: flex; flex-wrap: wrap; gap: 1rem; }
+.imgs figure { margin: 0; flex: 0 1 17rem; min-width: 0; }
+.imgs canvas { width: 100%; height: auto; display: block; border-radius: 4px; background: var(--bg); }
+.imgs figcaption { font-size: .9rem; color: var(--ink-3); margin-top: .3rem; font-variant-numeric: tabular-nums; }
+.seg { display: inline-flex; flex-wrap: wrap; gap: .35rem; }
+button[aria-pressed="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.recipe { display: grid; grid-template-columns: auto 1fr; gap: .3rem 1rem; font-variant-numeric: tabular-nums; font-size: .95rem; }
+.recipe > :nth-child(odd) { color: var(--ink-3); font-size: .88rem; }
+.c1 { color: var(--s1); } .c2 { color: var(--s2); } .c3 { color: var(--s3); }
+table.data { border-collapse: collapse; font-variant-numeric: tabular-nums; font-size: .95rem; margin: .5rem 0; }
+table.data th, table.data td { padding: .25rem .7rem; text-align: right; border-bottom: 1px solid var(--rule); }
+table.data th { color: var(--ink-3); font-weight: 500; }
+table.data th:first-child, table.data td:first-child { text-align: left; }
+
+</style>
+<script>
+/* ---------- shared helpers: numerics, formatting, DOM, SVG, stepper ---------- */
+"use strict";
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
+const el = (tag, attrs = {}, ...kids) => {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (k === "class") e.className = v; else if (k === "html") e.innerHTML = v;
+    else if (k.startsWith("on")) e.addEventListener(k.slice(2), v); else e.setAttribute(k, v);
+  }
+  for (const k of kids) if (k != null) e.append(k.nodeType ? k : document.createTextNode(k));
+  return e;
+};
+const SVGNS = "http://www.w3.org/2000/svg";
+const sv = (tag, attrs = {}, parent) => {
+  const e = document.createElementNS(SVGNS, tag);
+  for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
+  if (parent) parent.appendChild(e);
+  return e;
+};
+const cssVar = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+
+/* number formatting */
+function fmt(x, d = 4) {
+  if (!isFinite(x)) return x > 0 ? "∞" : (x < 0 ? "−∞" : "NaN");
+  if (x === 0) return "0";
+  const a = Math.abs(x);
+  let s;
+  if (a >= 1e5 || a < 1e-3) s = fmtExp(x, d);
+  else { s = (+x.toFixed(d)).toString(); }
+  return s.replace("-", "−");
+}
+function fmtExp(x, d = 3) {
+  if (x === 0) return "0";
+  const e = Math.floor(Math.log10(Math.abs(x)));
+  let m = x / Math.pow(10, e);
+  if (Math.abs(+m.toFixed(d - 1)) >= 10) { m /= 10; return fmtExp(x, d); }
+  return (+m.toFixed(d - 1)).toString().replace("-", "−") + "×10" + sup(e);
+}
+function sup(n) {
+  const m = { "-": "⁻", "0": "⁰", "1": "¹", "2": "²", "3": "³", "4": "⁴", "5": "⁵", "6": "⁶", "7": "⁷", "8": "⁸", "9": "⁹" };
+  return String(n).split("").map(c => m[c] || c).join("");
+}
+function fmtFrac(x) { // nice display for values that are near simple fractions/integers
+  if (Math.abs(x - Math.round(x)) < 1e-12) return String(Math.round(x)).replace("-", "−");
+  return fmt(x, 4);
+}
+
+/* ---------- linear algebra (dense, arrays of arrays) ---------- */
+const LA = {
+  clone: A => A.map(r => r.slice()),
+  eye: n => Array.from({ length: n }, (_, i) => Array.from({ length: n }, (_, j) => +(i === j))),
+  zeros: (m, n) => Array.from({ length: m }, () => new Array(n).fill(0)),
+  T: A => A[0].map((_, j) => A.map(r => r[j])),
+  mul(A, B) {
+    const m = A.length, k = B.length, n = B[0].length, C = LA.zeros(m, n);
+    for (let i = 0; i < m; i++) for (let p = 0; p < k; p++) { const a = A[i][p]; if (a) for (let j = 0; j < n; j++) C[i][j] += a * B[p][j]; }
+    return C;
+  },
+  mv: (A, x) => A.map(r => r.reduce((s, a, j) => s + a * x[j], 0)),
+  dot: (x, y) => x.reduce((s, a, i) => s + a * y[i], 0),
+  norm2: x => Math.hypot(...x),
+  norm1: x => x.reduce((s, a) => s + Math.abs(a), 0),
+  normInf: x => Math.max(...x.map(Math.abs)),
+  sub: (x, y) => x.map((a, i) => a - y[i]),
+  matNorm1: A => Math.max(...A[0].map((_, j) => A.reduce((s, r) => s + Math.abs(r[j]), 0))),
+  matNormInf: A => Math.max(...A.map(r => r.reduce((s, a) => s + Math.abs(a), 0))),
+  /* LU with optional partial pivoting; returns {L,U,perm,swaps} */
+  lu(A0, pivot = true) {
+    const n = A0.length, U = LA.clone(A0), L = LA.eye(n), perm = [...Array(n).keys()];
+    for (let k = 0; k < n - 1; k++) {
+      if (pivot) {
+        let p = k; for (let i = k + 1; i < n; i++) if (Math.abs(U[i][k]) > Math.abs(U[p][k])) p = i;
+        if (p !== k) { [U[k], U[p]] = [U[p], U[k]]; [perm[k], perm[p]] = [perm[p], perm[k]];
+          for (let j = 0; j < k; j++) [L[k][j], L[p][j]] = [L[p][j], L[k][j]]; }
+      }
+      for (let i = k + 1; i < n; i++) {
+        const m = U[i][k] / U[k][k]; L[i][k] = m;
+        for (let j = k; j < n; j++) U[i][j] -= m * U[k][j];
+        U[i][k] = 0;
+      }
+    }
+    return { L, U, perm };
+  },
+  fwd(L, b) { const n = b.length, y = new Array(n); for (let i = 0; i < n; i++) { let s = b[i]; for (let j = 0; j < i; j++) s -= L[i][j] * y[j]; y[i] = s / L[i][i]; } return y; },
+  back(U, y) { const n = y.length, x = new Array(n); for (let i = n - 1; i >= 0; i--) { let s = y[i]; for (let j = i + 1; j < n; j++) s -= U[i][j] * x[j]; x[i] = s / U[i][i]; } return x; },
+  solve(A, b, pivot = true) { const { L, U, perm } = LA.lu(A, pivot); return LA.back(U, LA.fwd(L, perm.map(i => b[i]))); },
+  /* Gauss–Jordan inverse with partial pivoting (the usual textbook inverse) */
+  inv(A0) {
+    const n = A0.length, M = A0.map((r, i) => [...r, ...LA.eye(n)[i]]);
+    for (let k = 0; k < n; k++) {
+      let p = k; for (let i = k + 1; i < n; i++) if (Math.abs(M[i][k]) > Math.abs(M[p][k])) p = i;
+      [M[k], M[p]] = [M[p], M[k]];
+      const d = M[k][k]; for (let j = 0; j < 2 * n; j++) M[k][j] /= d;
+      for (let i = 0; i < n; i++) if (i !== k) { const m = M[i][k]; if (m) for (let j = 0; j < 2 * n; j++) M[i][j] -= m * M[k][j]; }
+    }
+    return M.map(r => r.slice(n));
+  },
+  /* Cholesky solve (for normal equations) */
+  cholSolve(A, b) {
+    const n = A.length, L = LA.zeros(n, n);
+    for (let j = 0; j < n; j++) {
+      let s = A[j][j]; for (let k = 0; k < j; k++) s -= L[j][k] * L[j][k];
+      if (!(s > 0)) return null;
+      L[j][j] = Math.sqrt(s);
+      for (let i = j + 1; i < n; i++) { let t = A[i][j]; for (let k = 0; k < j; k++) t -= L[i][k] * L[j][k]; L[i][j] = t / L[j][j]; }
+    }
+    const y = LA.fwd(L, b); return LA.back(LA.T(L), y);
+  },
+  /* Householder QR least squares: returns x minimising ||Ax-b|| */
+  qrSolve(A0, b0) {
+    const m = A0.length, n = A0[0].length, A = LA.clone(A0), b = b0.slice();
+    for (let k = 0; k < n; k++) {
+      let nr = 0; for (let i = k; i < m; i++) nr += A[i][k] * A[i][k]; nr = Math.sqrt(nr);
+      if (nr === 0) continue;
+      const alpha = A[k][k] > 0 ? -nr : nr, v = new Array(m).fill(0);
+      v[k] = A[k][k] - alpha; for (let i = k + 1; i < m; i++) v[i] = A[i][k];
+      let vv = 0; for (let i = k; i < m; i++) vv += v[i] * v[i];
+      if (vv === 0) continue;
+      for (let j = k; j < n; j++) { let s = 0; for (let i = k; i < m; i++) s += v[i] * A[i][j]; s = 2 * s / vv; for (let i = k; i < m; i++) A[i][j] -= s * v[i]; }
+      let s = 0; for (let i = k; i < m; i++) s += v[i] * b[i]; s = 2 * s / vv; for (let i = k; i < m; i++) b[i] -= s * v[i];
+    }
+    const R = A.slice(0, n).map(r => r.slice(0, n));
+    return LA.back(R, b.slice(0, n));
+  },
+  /* singular values via one-sided Jacobi (accurate for small dense matrices) */
+  svals(A0) {
+    const m = A0.length, n = A0[0].length;
+    let U = A0.map(r => r.slice());
+    if (m < n) U = LA.T(U);
+    const cols = U[0].length, rows = U.length;
+    for (let sweep = 0; sweep < 60; sweep++) {
+      let off = 0;
+      for (let p = 0; p < cols - 1; p++) for (let q = p + 1; q < cols; q++) {
+        let a = 0, b = 0, c = 0;
+        for (let i = 0; i < rows; i++) { a += U[i][p] * U[i][p]; b += U[i][q] * U[i][q]; c += U[i][p] * U[i][q]; }
+        if (Math.abs(c) <= 1e-15 * Math.sqrt(a * b)) continue;
+        off = Math.max(off, Math.abs(c) / Math.sqrt(a * b));
+        const z = (b - a) / (2 * c), t = Math.sign(z || 1) / (Math.abs(z) + Math.sqrt(1 + z * z));
+        const cs = 1 / Math.sqrt(1 + t * t), sn = cs * t;
+        for (let i = 0; i < rows; i++) { const up = U[i][p], uq = U[i][q]; U[i][p] = cs * up - sn * uq; U[i][q] = sn * up + cs * uq; }
+      }
+      if (off < 1e-15) break;
+    }
+    const s = []; for (let j = 0; j < cols; j++) { let t = 0; for (let i = 0; i < rows; i++) t += U[i][j] * U[i][j]; s.push(Math.sqrt(t)); }
+    return s.sort((a, b) => b - a);
+  },
+  cond2(A) { const s = LA.svals(A); return s[0] / s[s.length - 1]; },
+};
+
+/* seeded PRNG so every student sees the same "random" numbers */
+function mulberry32(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+
+/* ---------- matrix rendering ---------- */
+/* cls(i,j) -> class name; fmtf(v,i,j) -> string */
+function matTable(M, { label = "matrix", cls = () => "", fmtf = v => fmtFrac(v), cap = null } = {}) {
+  const t = el("table", { class: "mat", "aria-label": `${label}, ${M.length} by ${M[0].length}` });
+  const tb = el("tbody"); t.append(tb);
+  M.forEach((r, i) => { const tr = el("tr"); r.forEach((v, j) => { const c = cls(i, j); tr.append(el("td", c ? { class: c } : {}, fmtf(v, i, j))); }); tb.append(tr); });
+  const w = el("div", { class: "matwrap" }, t);
+  if (cap) w.append(el("div", { class: "cap", html: cap }));
+  return w;
+}
+const colVec = x => x.map(v => [v]);
+
+/* ---------- linear scale + axes ---------- */
+function scale(d0, d1, r0, r1, log = false) {
+  if (log) { const a = Math.log10(d0), b = Math.log10(d1); const f = v => r0 + (Math.log10(v) - a) / (b - a) * (r1 - r0); f.inv = p => Math.pow(10, a + (p - r0) / (r1 - r0) * (b - a)); return f; }
+  const f = v => r0 + (v - d0) / (d1 - d0) * (r1 - r0); f.inv = p => d0 + (p - r0) / (r1 - r0) * (d1 - d0); return f;
+}
+function niceTicks(a, b, n = 6) {
+  const span = b - a, step0 = span / n, mag = Math.pow(10, Math.floor(Math.log10(step0)));
+  const step = [1, 2, 2.5, 5, 10].map(s => s * mag).find(s => span / s <= n) || 10 * mag;
+  const out = []; for (let v = Math.ceil(a / step) * step; v <= b + 1e-9 * step; v += step) out.push(+v.toFixed(10));
+  return out;
+}
+/* axes(svg, X, Y, {xt, yt, xlab, ylab, W, H, pad, log flags}) */
+function drawAxes(g, X, Y, o) {
+  const { x0, x1, y0, y1 } = o;
+  const xt = o.xt || niceTicks(o.xd[0], o.xd[1]), yt = o.yt || niceTicks(o.yd[0], o.yd[1]);
+  for (const t of yt) { sv("line", { x1: x0, x2: x1, y1: Y(t), y2: Y(t), class: "grid" }, g);
+    sv("text", { x: x0 - 6, y: Y(t) + 4, "text-anchor": "end" }, g).textContent = o.yfmt ? o.yfmt(t) : fmt(t, 3); }
+  for (const t of xt) { sv("line", { x1: X(t), x2: X(t), y1: y0, y2: y0 + 4, class: "axis" }, g);
+    sv("text", { x: X(t), y: y0 + 17, "text-anchor": "middle" }, g).textContent = o.xfmt ? o.xfmt(t) : fmt(t, 3); }
+  sv("line", { x1: x0, x2: x1, y1: y0, y2: y0, class: "axis" }, g);
+  sv("line", { x1: x0, x2: x0, y1: y0, y2: y1, class: "axis" }, g);
+  if (o.xlab) sv("text", { x: (x0 + x1) / 2, y: y0 + 36, "text-anchor": "middle" }, g).textContent = o.xlab;
+  if (o.ylab) { const t = sv("text", { x: 0, y: 0, "text-anchor": "middle", transform: `translate(${x0 - 46},${(y0 + y1) / 2}) rotate(-90)` }, g); t.textContent = o.ylab; }
+}
+
+/* ---------- stepper: prev / next / reset with aria-live narration ---------- */
+class Stepper {
+  constructor(root, { onRender, total, labels = {} }) {
+    this.i = 0; this.onRender = onRender; this.total = total;
+    this.prev = el("button", { type: "button", onclick: () => this.go(this.i - 1) }, labels.prev || "◀ Back");
+    this.next = el("button", { type: "button", class: "primary", onclick: () => this.go(this.i + 1) }, labels.next || "Next ▶");
+    this.reset = el("button", { type: "button", onclick: () => this.go(0) }, "Start over");
+    this.count = el("span", { class: "stepcount", "aria-hidden": "true" });
+    root.append(this.prev, this.next, this.reset, this.count);
+  }
+  setTotal(n) { this.total = n; this.go(Math.min(this.i, n - 1)); }
+  go(i) {
+    this.i = Math.max(0, Math.min(this.total - 1, i));
+    this.prev.disabled = this.i === 0; this.next.disabled = this.i === this.total - 1;
+    this.count.textContent = `Step ${this.i + 1} of ${this.total}`;
+    this.onRender(this.i);
+  }
+}
+
+/* announce helper for sliders etc. (debounced) */
+function makeAnnouncer(node) { let t; return msg => { clearTimeout(t); t = setTimeout(() => { node.textContent = msg; }, 350); }; }
+
+/* ---------- full SVD by one-sided Jacobi (Hestenes) ----------
+   svd(A) for an m x n array-of-rows. Returns {s, U, V}: s sorted descending,
+   U = array of r column vectors (length m), V = array of r column vectors (length n), r = min(m, n). */
+LA.svd = function (A0) {
+  let m = A0.length, n = A0[0].length, tr = false, get = (i, j) => A0[i][j];
+  if (m < n) { tr = true; [m, n] = [n, m]; get = (i, j) => A0[j][i]; }
+  const C = Array.from({ length: n }, (_, j) => { const c = new Float64Array(m); for (let i = 0; i < m; i++) c[i] = get(i, j); return c; });
+  const V = Array.from({ length: n }, (_, j) => { const v = new Float64Array(n); v[j] = 1; return v; });
+  for (let sweep = 0; sweep < 40; sweep++) {
+    let off = 0;
+    for (let p = 0; p < n - 1; p++) for (let q = p + 1; q < n; q++) {
+      const cp = C[p], cq = C[q];
+      let a = 0, b = 0, c = 0;
+      for (let i = 0; i < m; i++) { const x = cp[i], y = cq[i]; a += x * x; b += y * y; c += x * y; }
+      if (c === 0 || Math.abs(c) <= 1e-15 * Math.sqrt(a * b)) continue;
+      off = Math.max(off, Math.abs(c) / Math.sqrt(a * b));
+      const z = (b - a) / (2 * c), t = Math.sign(z || 1) / (Math.abs(z) + Math.sqrt(1 + z * z));
+      const cs = 1 / Math.sqrt(1 + t * t), sn = cs * t;
+      for (let i = 0; i < m; i++) { const x = cp[i], y = cq[i]; cp[i] = cs * x - sn * y; cq[i] = sn * x + cs * y; }
+      const vp = V[p], vq = V[q];
+      for (let i = 0; i < n; i++) { const x = vp[i], y = vq[i]; vp[i] = cs * x - sn * y; vq[i] = sn * x + cs * y; }
+    }
+    if (off < 1e-14) break;
+  }
+  const norms = C.map(c => Math.sqrt(c.reduce((s, x) => s + x * x, 0)));
+  const order = [...norms.keys()].sort((i, j) => norms[j] - norms[i]);
+  const s = order.map(j => norms[j]);
+  const Uc = order.map(j => { const c = C[j], d = norms[j]; return d > 0 ? c.map(x => x / d) : c.map(() => 0); });
+  const Vc = order.map(j => V[j]);
+  return tr ? { s, U: Vc, V: Uc } : { s, U: Uc, V: Vc };
+};
+/* flip signs so each v_i has a positive first nonzero entry (u_i flips with it) */
+LA.svdTidy = function (S) {
+  S.V.forEach((v, i) => { const k = v.findIndex(x => Math.abs(x) > 1e-12); if (k >= 0 && v[k] < 0) { S.V[i] = v.map(x => -x); S.U[i] = S.U[i].map(x => -x); } });
+  return S;
+};
+/* standard normal from a uniform PRNG (Box–Muller) */
+function gauss(rand) { let u = 0; while (u === 0) u = rand(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * rand()); }
+
+</script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<div class="wrap">
+<header class="site"><p class="crumb"><a href="index.html">The SVD &mdash; explorers</a></p><p class="crumb">MATH/CCM 472/572 &middot; The Singular Value Decomposition</p></header>
+<main id="main">
+<!-- title: Eckart–Young in the 2-Norm -->
+<!-- desc: Why truncating the SVD gives the best rank-k approximation: a two-step proof of the Eckart-Young theorem, then live examples of each step. -->
+<style>
+/* Eckart–Young page */
+.prose { max-width: 44rem; }
+.thm { border-left: 3px solid var(--accent); padding: .3rem 0 .3rem .9rem; margin: 1rem 0; }
+mjx-container[display="true"] { overflow-x: auto; overflow-y: hidden; max-width: 100%; padding: .15rem 0; }
+.widget { background: var(--surface); border-radius: 10px; padding: 1rem 1.1rem 1.1rem; margin: 1.25rem 0 1.5rem; }
+.widget > h3:first-child, .widget > .tag + h3 { margin-top: 0; }
+.widget .tag { font-size: .8rem; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); margin: 0 0 .15rem; }
+canvas.wide { width: 100%; aspect-ratio: 2.1 / 1; display: block; border-radius: 6px; background: var(--bg); }
+canvas.cube { width: 100%; aspect-ratio: 1.15 / 1; display: block; touch-action: none; border-radius: 6px; background: var(--bg); cursor: grab; }
+canvas.cube:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+.status { font-weight: 600; }
+.qa details { border-top: 1px solid var(--rule); padding: .4rem 0; margin: 0; }
+.qa details:last-child { border-bottom: 1px solid var(--rule); }
+.qa summary { font-weight: 600; color: var(--ink); }
+.qa summary::marker { color: var(--accent); }
+.qa .ans { padding: .25rem 0 .25rem 1.1rem; }
+.sliders { display: grid; grid-template-columns: auto minmax(0, 1fr) 3.5rem; gap: .35rem .75rem; align-items: center; max-width: 30rem; }
+.sliders output { font-variant-numeric: tabular-nums; text-align: right; }
+.sliders input[type=range] { width: 100%; }
+.step { margin: .9rem 0; }
+</style>
+
+<h1>Eckart&ndash;Young in the 2-norm</h1>
+<p class="lede">Cutting the SVD after <i>k</i> layers gives the best possible rank-<i>k</i> approximation, and its error in the 2-norm is exactly &sigma;<sub><i>k</i>+1</sub>. The short proof comes first. After it, each piece of the proof gets an example you can drag and test.</p>
+
+<nav class="toc" aria-label="On this page">
+<ol>
+  <li><a href="#theorem">The theorem</a></li>
+  <li><a href="#proof">The proof</a></li>
+  <li><a href="#ingredients">The three ingredients, one example each</a></li>
+  <li><a href="#worked">The whole proof on one example</a></li>
+  <li><a href="#questions">Questions that come up</a></li>
+  <li><a href="#check">Check your understanding</a></li>
+</ol>
+</nav>
+
+<!-- ============================================================ -->
+<h2 id="theorem">The theorem</h2>
+<div class="prose">
+<p>Take <i>A</i> to be <i>n</i> &times; <i>n</i> for simplicity (the same argument works for any shape), and write its SVD as a sum of rank-one layers, with the singular values in decreasing order. Let \(A_k\) keep the first <i>k</i> of them:</p>
+\[ A=\sum_{i=1}^{n}\sigma_i u_i v_i^T,\qquad \sigma_1\ge\cdots\ge\sigma_n\ge 0,\qquad A_k=\sum_{i=1}^{k}\sigma_i u_i v_i^T . \]
+<p>The error \(A-A_k\) is the sum of the discarded layers, so its largest stretch is \(\sigma_{k+1}\). The theorem says no other rank-<i>k</i> matrix does better.</p>
+<div class="thm">
+<p><strong>Theorem (Eckart&ndash;Young, 2-norm).</strong> For each \(k&lt;n\) and every matrix <i>B</i> of rank at most <i>k</i>,</p>
+\[ \|A-B\|_2\;\ge\;\sigma_{k+1}=\|A-A_k\|_2 . \]
+</div>
+<p>Here \(\|M\|_2\) is the largest stretch <i>M</i> gives to a unit vector: the largest value of \(\|Mx\|\) over all <i>x</i> with \(\|x\|=1\).</p>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="proof">The proof</h2>
+<div class="prose">
+<p>The plan is to find one unit vector <i>w</i> that <i>B</i> sends to zero and <i>A</i> stretches by at least \(\sigma_{k+1}\). That is enough: on such a <i>w</i> the error \(A-B\) acts exactly like <i>A</i>, and the largest stretch of \(A-B\) is at least the stretch of <i>w</i>. Let <i>B</i> be any matrix of rank at most <i>k</i>, and let <i>S</i> be the span of \(v_1,\dots,v_{k+1}\).</p>
+
+<p class="step"><strong>Step 1 (<i>A</i> is strong on <i>S</i>).</strong> A unit vector in <i>S</i> is \(w=c_1v_1+\cdots+c_{k+1}v_{k+1}\) with \(c_1^2+\cdots+c_{k+1}^2=1\), because the <i>v</i>&rsquo;s are orthonormal. Since \(Av_i=\sigma_iu_i\), the \(u_i\) are orthonormal, and \(\sigma_i\ge\sigma_{k+1}\) for every \(i\le k+1\),</p>
+\[ \|Aw\|^2=c_1^2\sigma_1^2+\cdots+c_{k+1}^2\sigma_{k+1}^2\;\ge\;\sigma_{k+1}^2\,(c_1^2+\cdots+c_{k+1}^2)=\sigma_{k+1}^2 . \]
+
+<p class="step"><strong>Step 2 (<i>B</i> sends some <i>w</i> in <i>S</i> to zero).</strong> Every output of <i>B</i> lies in its column space, which has dimension at most <i>k</i>. The \(k+1\) vectors \(Bv_1,\dots,Bv_{k+1}\) therefore cannot be independent: there are numbers \(c_1,\dots,c_{k+1}\), not all zero, with</p>
+\[ c_1Bv_1+\cdots+c_{k+1}Bv_{k+1}=0 . \]
+<p>The left side is \(B(c_1v_1+\cdots+c_{k+1}v_{k+1})\). So \(w=c_1v_1+\cdots+c_{k+1}v_{k+1}\) is a vector in <i>S</i> with \(Bw=0\). It is not zero, because the <i>v</i>&rsquo;s are independent, so we can rescale it to length 1.</p>
+
+<p class="step"><strong>Conclusion.</strong> For this <i>w</i>, \((A-B)w=Aw\), so by Step 1</p>
+\[ \|A-B\|_2\;\ge\;\|(A-B)w\|=\|Aw\|\;\ge\;\sigma_{k+1}. \qquad\blacksquare \]
+<p>The first inequality holds because \(\|A-B\|_2\) is the largest stretch over all unit vectors, so it is at least the stretch of this one.</p>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="ingredients">The three ingredients, one example each</h2>
+<p class="prose">The proof rests on three facts. Each is small, and each has a picture.</p>
+
+<h3>One unit vector is enough to bound a largest stretch (the conclusion)</h3>
+<div class="prose">
+<p>The conclusion bounds \(\|A-B\|_2\) below by the stretch of a single vector. That works because \(\|A-B\|_2\) is a <em>largest</em> stretch: one input stretched by \(\sigma_{k+1}\) shows the largest is at least \(\sigma_{k+1}\), and inputs with smaller stretch cannot lower it.</p>
+<p><strong>Example.</strong> \(M=\operatorname{diag}(0,2)\) sends (1, 0) to zero, a stretch of 0. Its 2-norm is still 2, because (0, 1) is stretched by 2:</p>
+\[ M\begin{pmatrix}1\\0\end{pmatrix}=\begin{pmatrix}0\\0\end{pmatrix},\qquad M\begin{pmatrix}0\\1\end{pmatrix}=\begin{pmatrix}0\\2\end{pmatrix},\qquad \|M\|_2=2 . \]
+</div>
+
+<section class="widget" id="w-stretch" aria-labelledby="w-stretch-h">
+  <p class="tag">Explorer 1</p>
+  <h3 id="w-stretch-h">Stretch, one input at a time</h3>
+  <p class="figcap" style="margin-top:0">Drag <i>x</i> around the unit circle, or focus the left picture and use the arrow keys (Shift turns faster). The graph records how much <i>M</i> stretches every direction; its highest point is \(\|M\|_2\).</p>
+  <div class="controls seg" role="group" aria-label="Choose the matrix M" data-role="presets"></div>
+  <div class="row">
+    <div class="col"><canvas class="plane" data-role="plane" tabindex="0"></canvas></div>
+    <div class="col">
+      <canvas class="wide" data-role="plot" role="img"></canvas>
+      <dl class="kv readout" data-role="facts" style="margin-top:.6rem"></dl>
+    </div>
+  </div>
+  <div class="controls"><button type="button" data-role="tomax">Point <i>x</i> at the largest stretch</button><button type="button" data-role="tomin">Point <i>x</i> at the smallest stretch</button></div>
+  <div class="narr" data-role="narr"></div>
+</section>
+
+<p class="prose">The order matters too. <i>B</i> is chosen first, by an opponent who may make it as clever as they like; all we know about it is that its rank is at most <i>k</i>. Then we must find <i>w</i> for that <i>B</i>. We never get to inspect <i>B</i> and pick a convenient vector, so the argument must work for every <i>B</i>.</p>
+
+<h3><i>A</i> stretches every vector in <i>S</i> by at least &sigma;<sub><i>k</i>+1</sub> (Step 1)</h3>
+<div class="prose">
+<p>Step 1 is split, stretch, add followed by Pythagoras. Each basic direction \(v_i\) in <i>S</i> is stretched by \(\sigma_i\ge\sigma_{k+1}\), and the images \(\sigma_iu_i\) are perpendicular, so nothing cancels when they are combined. That is why every unit vector in <i>S</i>, not only the \(v_i\), is stretched by at least \(\sigma_{k+1}\).</p>
+<p><strong>Example.</strong> Take \(A=\operatorname{diag}(3,2)\), so <i>S</i> is the whole plane and \(\sigma_2=2\). A unit vector is \(w=(a,b)\) with \(a^2+b^2=1\), and</p>
+\[ Aw=\begin{pmatrix}3a\\2b\end{pmatrix},\qquad \|Aw\|^2=9a^2+4b^2\;\ge\;4a^2+4b^2=4 . \]
+<p>So \(\|Aw\|\ge2\) for every unit <i>w</i>, with equality at \(w=(0,1)\). In pictures: <i>A</i> turns the unit circle into an ellipse with arms 3 and 2, and no point of the ellipse is closer to the origin than 2.</p>
+<p>The perpendicular images matter. The 2 &times; 2 matrix with every entry 1 stretches (1, 0) and (0, 1) by \(\sqrt2\) each, yet sends \((1,-1)/\sqrt2\) to zero, because their images are equal and cancel. Compare the two in Explorer 2.</p>
+</div>
+
+<section class="widget" id="w-floor" aria-labelledby="w-floor-h">
+  <p class="tag">Explorer 2</p>
+  <h3 id="w-floor-h">Perpendicular images give a floor</h3>
+  <p class="figcap" style="margin-top:0">Drag <i>w</i> around the unit circle, or focus the left picture and use the arrow keys. For diag(3, 2) the lowest point of the graph is 2. For the all-ones matrix the images of (1, 0) and (0, 1) are the same vector, and the graph drops to 0.</p>
+  <div class="controls seg" role="group" aria-label="Choose the matrix A" data-role="presets"></div>
+  <div class="row">
+    <div class="col"><canvas class="plane" data-role="plane" tabindex="0"></canvas></div>
+    <div class="col">
+      <canvas class="wide" data-role="plot" role="img"></canvas>
+      <dl class="kv readout" data-role="facts" style="margin-top:.6rem"></dl>
+    </div>
+  </div>
+  <div class="controls"><button type="button" data-role="tomax">Point <i>w</i> at the largest stretch</button><button type="button" data-role="tomin">Point <i>w</i> at the smallest stretch</button></div>
+  <div class="narr" data-role="narr"></div>
+</section>
+
+<h3>A rank-<i>k</i> matrix sends some combination of <i>k</i> + 1 directions to zero (Step 2)</h3>
+<div class="prose">
+<p><strong>Why we want \(Bw=0\).</strong> For a general input, \((A-B)w=Aw-Bw\), and <i>Bw</i> is an unknown vector that might nearly cancel <i>Aw</i>. Rank is the only thing we know about <i>B</i>. Where \(Bw=0\), the error is exactly <i>Aw</i>, which Step 1 lets us measure.</p>
+<p>Step 2 uses one fact: a space of dimension <i>k</i> cannot hold more than <i>k</i> independent vectors. The space here is the column space of <i>B</i>, the set of all its outputs <i>Bx</i>, whose dimension is the rank of <i>B</i>.</p>
+<p><strong>Example.</strong> This <i>B</i> has rank one, because every output is a multiple of (1, 2, 0). Feed it \(v_1=(1,0,0)\) and \(v_2=(0,1,0)\):</p>
+\[ B=\begin{pmatrix}1&1&0\\2&2&0\\0&0&0\end{pmatrix},\qquad Bv_1=\begin{pmatrix}1\\2\\0\end{pmatrix},\qquad Bv_2=\begin{pmatrix}1\\2\\0\end{pmatrix}. \]
+<p>The two outputs are equal, so \(Bv_1-Bv_2=0\), which means \(c_1=1\) and \(c_2=-1\). The matching input is \(w=(v_1-v_2)/\sqrt2=(1,-1,0)/\sqrt2\), and \(Bw=0\).</p>
+</div>
+
+<section class="widget" id="w-dep" aria-labelledby="w-dep-h">
+  <p class="tag">Explorer 3</p>
+  <h3 id="w-dep-h"><i>B</i> cannot keep two directions apart</h3>
+  <p class="figcap" style="margin-top:0">Here \(w=(\cos\theta)\,v_1+(\sin\theta)\,v_2\) runs around the unit circle in <i>S</i>, the <i>xy</i>-plane, and the graph shows the length of <i>Bw</i>. Because <i>B</i> has rank one, \(Bv_1\) and \(Bv_2\) lie on one line, and the graph always reaches zero.</p>
+  <div class="controls seg" role="group" aria-label="Choose B" id="dpre">
+    <button type="button" data-b="notes" aria-pressed="true"><i>B</i> from the example</button>
+    <button type="button" data-b="a1" aria-pressed="false"><i>B</i> = diag(3, 0, 0)</button>
+  </div>
+  <div class="sliders">
+    <label for="dth">&theta;</label><input type="range" id="dth" min="-90" max="90" step="1" value="20"><output for="dth" id="dtho">20°</output>
+  </div>
+  <div class="row" style="margin-top:.6rem">
+    <div class="col"><canvas class="wide" id="dplot" role="img" aria-label="Graph of the length of Bw as theta goes from minus 90 to 90 degrees. It touches zero at one angle."></canvas></div>
+    <div class="col"><dl class="kv readout" id="dfacts"></dl></div>
+  </div>
+  <div class="controls"><button type="button" id="dsolve">Find the <i>w</i> that <i>B</i> sends to zero</button></div>
+  <div class="narr" id="dnarr"></div>
+</section>
+
+<div class="prose">
+<p><strong>Finding the <i>c</i>&rsquo;s is a linear system.</strong> Put \(v_1,\dots,v_{k+1}\) in the columns of a matrix <i>V</i>. The equation \(c_1Bv_1+\cdots+c_{k+1}Bv_{k+1}=0\) is the homogeneous system \((BV)c=0\). <i>BV</i> has \(k+1\) columns but rank at most <i>k</i>, so elimination leaves a free variable, and a free variable gives a nonzero solution.</p>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="worked">The whole proof on one example</h2>
+<div class="prose">
+<p>With \(A=\operatorname{diag}(3,2,1)\) and \(k=1\), no rank-one <i>B</i> gets the error below \(\sigma_2=2\).</p>
+\[ A=\begin{pmatrix}3&0&0\\0&2&0\\0&0&1\end{pmatrix},\qquad A_1=\begin{pmatrix}3&0&0\\0&0&0\\0&0&0\end{pmatrix},\qquad \|A-A_1\|_2=\sigma_2=2 . \]
+<p>Here \(v_1,v_2,v_3\) are the <i>x</i>-, <i>y</i>- and <i>z</i>-axes, so <i>S</i> is the <i>xy</i>-plane.</p>
+<ul>
+  <li><strong>Step 1.</strong> <i>A</i> stretches every unit vector in the <i>xy</i>-plane by at least 2: for \(w=(a,b,0)\), \(\|Aw\|^2=9a^2+4b^2\ge4\).</li>
+  <li><strong>Step 2.</strong> For any rank-one <i>B</i>, the outputs \(Bv_1\) and \(Bv_2\) lie on <i>B</i>&rsquo;s single output line, so \(c_1Bv_1+c_2Bv_2=0\) for some \(c_1,c_2\) not both zero. Then \(w=(c_1,c_2,0)\), scaled to length 1, satisfies \(Bw=0\) and \(\|Aw\|\ge2\).</li>
+</ul>
+<p><strong>With the rank-one <i>B</i> from Step 2&rsquo;s example.</strong> There \(Bv_1=Bv_2\), so \(w=(1,-1,0)/\sqrt2\) and</p>
+\[ Bw=0,\qquad (A-B)w=Aw=\frac{1}{\sqrt2}\begin{pmatrix}3\\-2\\0\end{pmatrix},\qquad \|(A-B)w\|=\sqrt{13/2}\approx 2.55\;\ge\;2 . \]
+<p>The 2-norm itself is larger still, \(\|A-B\|_2\approx2.92\). The proof needs only the lower bound from <i>w</i>.</p>
+<p><strong>With \(B=A_1\).</strong> Now \(Bv_1=(3,0,0)\) and \(Bv_2=0\), so \(c_1=0\), \(c_2=1\) and \(w=(0,1,0)\). Then \(\|Aw\|=2\) exactly. The best opponent pushes <i>w</i> onto <i>A</i>&rsquo;s weakest direction in <i>S</i>, which is why the bound \(\sigma_2\) cannot be improved.</p>
+<p><strong>The picture.</strong> The <i>w</i> that Step 2 finds lies in two planes at once. One is the null space of <i>B</i>, the inputs <i>B</i> sends to zero, which is a plane: <i>B</i> uses one direction of \(\mathbb{R}^3\), so it ignores the other two. The other is <i>S</i>, the <i>xy</i>-plane. Two planes through the origin in \(\mathbb{R}^3\) always share a line, and <i>w</i> points along it. In Explorer 4 you play the opponent: choose <i>B</i> by turning and tilting its null space, and try to push the error below 2.</p>
+</div>
+
+<section class="widget" id="w-game" aria-labelledby="w-game-h">
+  <p class="tag">Explorer 4</p>
+  <h3 id="w-game-h">You choose <i>B</i>; Step 2 finds <i>w</i></h3>
+  <p class="figcap" style="margin-top:0">The <span class="c1">blue</span> plane is <i>S</i>, where <i>A</i> is strong. The <span class="c2">orange</span> plane is the null space of your rank-one <i>B</i>. The page computes \(Bv_1\), \(Bv_2\) and the dependence between them; the resulting <span class="c3"><i>w</i></span> lies on the black line where the planes cross. Drag the picture to turn it, or focus it and use the arrow keys.</p>
+  <div class="controls seg" role="group" aria-label="Example choices of B" id="gpre">
+    <button type="button" data-p="notes"><i>B</i> from the example</button>
+    <button type="button" data-p="a1"><i>B</i> = <i>A</i><sub>1</sub></button>
+    <button type="button" data-p="flat">Blind on the <i>xy</i>-plane</button>
+    <button type="button" data-p="rand">Random <i>B</i></button>
+  </div>
+  <div class="row">
+    <div class="col" style="flex-basis:22rem">
+      <canvas class="cube" id="gcv" tabindex="0" role="img" aria-describedby="gsum"></canvas>
+      <div class="sliders" style="margin-top:.6rem">
+        <label for="gth">Turn <i>B</i>&rsquo;s null space</label><input type="range" id="gth" min="0" max="179" step="1" value="45"><output for="gth" id="gtho">45°</output>
+        <label for="gph">Tilt <i>B</i>&rsquo;s null space</label><input type="range" id="gph" min="-90" max="90" step="1" value="0"><output for="gph" id="gpho">0°</output>
+      </div>
+      <div class="controls" role="group" aria-label="Directions used for S">
+        <span class="muted" style="font-size:.95rem"><i>S</i> uses:</span>
+        <span class="seg"><button type="button" id="gS2" aria-pressed="true"><i>v</i><sub>1</sub>, <i>v</i><sub>2</sub> (<i>k</i> + 1 = 2)</button><button type="button" id="gS1" aria-pressed="false"><i>v</i><sub>1</sub> only (<i>k</i> = 1)</button></span>
+      </div>
+    </div>
+    <div class="col">
+      <div class="mats" id="gmat"></div>
+      <dl class="kv readout" id="gfacts"></dl>
+    </div>
+  </div>
+  <div class="narr" id="gsum"></div>
+  <p class="figcap" id="grec"></p>
+</section>
+
+<div class="prose">
+<p><strong>Why <i>S</i> needs <i>k</i> + 1 = 2 directions.</strong> With only \(v_1\), Step 2 would need \(Bv_1=0\), and \(B=A_1\) refuses: \(Bv_1=(3,0,0)\). One output in a one-dimensional space need not be dependent; two outputs must be. Switch Explorer 4 to &ldquo;<i>v</i><sub>1</sub> only&rdquo; to see the proof fail for almost every <i>B</i>.</p>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="questions">Questions that come up</h2>
+<div class="qa prose">
+<details><summary>Couldn&rsquo;t some other vector have \(\|(A-B)x\|\) smaller than \(\sigma_{k+1}\)?</summary>
+<div class="ans"><p>Yes, and that is fine. The 2-norm is the largest stretch, so one input stretched by \(\sigma_{k+1}\) settles it. In the example, \(A-A_1\) sends the <i>x</i>-axis to zero, yet its norm is 2.</p></div></details>
+<details><summary>Aren&rsquo;t we just picking a <i>w</i> that agrees with what we want?</summary>
+<div class="ans"><p>No, because <i>B</i> comes first and is arbitrary. Step 2 builds <i>w</i> from <i>B</i> itself, out of the dependence among \(Bv_1,\dots,Bv_{k+1}\), and that dependence exists for every rank-<i>k</i> <i>B</i>, including the best one anyone could design. In Explorer 4 you choose <i>B</i>; the page only finds <i>w</i> afterwards.</p></div></details>
+<details><summary>Why \(k+1\) directions and not <i>k</i>?</summary>
+<div class="ans"><p>Because <i>k</i> outputs in a <i>k</i>-dimensional space can be independent, and then Step 2 finds nothing. \(A_k\) is exactly that case: it sends \(v_1,\dots,v_k\) to \(\sigma_1u_1,\dots,\sigma_ku_k\), which are independent when \(\sigma_k&gt;0\), so no combination of \(v_1,\dots,v_k\) goes to zero. With \(k+1\) directions the outputs must be dependent, and the weakest of those directions is stretched by \(\sigma_{k+1}\). That is where the number in the theorem comes from.</p></div></details>
+<details><summary>Is \(\sigma_{k+1}\) really the best bound?</summary>
+<div class="ans"><p>Yes, because truncation achieves it. For \(B=A_k\), the dependence is simply \(A_kv_{k+1}=0\), so \(w=v_{k+1}\) and \(\|(A-A_k)w\|=\sigma_{k+1}\).</p></div></details>
+<details><summary>Why not use the triangle inequality instead?</summary>
+<div class="ans"><p>You could write \(\|Aw-Bw\|\ge\|Aw\|-\|Bw\|\), but \(\|Bw\|\) is unknown and might be large, which makes the bound useless. The best case is \(\|Bw\|=0\), and Step 2 gives exactly that.</p></div></details>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="check">Check your understanding</h2>
+<p class="prose muted">Work each one out first, then open the answer.</p>
+<div class="qa prose">
+<details><summary>1. Let \(A=\operatorname{diag}(5,4,2)\) and \(k=1\). What does the theorem say about \(\|A-B\|_2\) for every rank-one <i>B</i>? Which matrix achieves it?</summary>
+<div class="ans"><p>\(\|A-B\|_2\ge\sigma_2=4\) for every rank-one <i>B</i>. The truncation \(A_1=\operatorname{diag}(5,0,0)\) achieves it: \(A-A_1=\operatorname{diag}(0,4,2)\), whose largest stretch is 4.</p></div></details>
+<details><summary>2. For that <i>A</i>, let <i>B</i> be the matrix with a single 1 in the top-left corner and zeros elsewhere. Compute \(Bv_1\) and \(Bv_2\), find \(c_1\) and \(c_2\) with \(c_1Bv_1+c_2Bv_2=0\), and use them to find <i>w</i> and \(\|(A-B)w\|\).</summary>
+<div class="ans"><p>\(Bv_1=(1,0,0)\) and \(Bv_2=0\), so \(c_1=0\), \(c_2=1\) works, and \(w=v_2=(0,1,0)\). Then \(Bw=0\) and \((A-B)w=Aw=(0,4,0)\), so \(\|(A-B)w\|=4\ge\sigma_2\).</p></div></details>
+<details><summary>3. Let \(A=\operatorname{diag}(3,2,1)\) and let <i>B</i> have rows (1, 2, 0), (1, 2, 0) and (0, 0, 0). Find the dependence between \(Bv_1\) and \(Bv_2\), build <i>w</i>, and check that \(\|(A-B)w\|\ge2\).</summary>
+<div class="ans"><p>\(Bv_1=(1,1,0)\) and \(Bv_2=(2,2,0)\), so \(2Bv_1-Bv_2=0\): \(c_1=2\), \(c_2=-1\). Then \(w=(2,-1,0)/\sqrt5\), \(Bw=0\), and \(Aw=(6,-2,0)/\sqrt5\), so \(\|(A-B)w\|=\sqrt{40/5}=2\sqrt2\approx2.83\ge2\).</p></div></details>
+<details><summary>4. Explain in your own words why the proof uses \(v_1,\dots,v_{k+1}\) rather than \(v_1,\dots,v_k\).</summary>
+<div class="ans"><p><i>B</i> has rank at most <i>k</i>, so it can keep <i>k</i> directions apart: \(Bv_1,\dots,Bv_k\) may be independent, and \(A_k\) shows they can be. Only with \(k+1\) directions are the outputs forced to be dependent, which produces the <i>w</i> with \(Bw=0\).</p></div></details>
+<details><summary>5. A classmate says: &ldquo;I found a vector <i>x</i> with \(\|(A-B)x\|=0\), so \(\|A-B\|_2\) could be 0.&rdquo; What is wrong with this reasoning?</summary>
+<div class="ans"><p>\(\|A-B\|_2\) is the <em>largest</em> stretch over all unit inputs. One input with stretch 0 says nothing about the largest; Explorer 1 with diag(0, 2) shows a matrix that sends a direction to 0 and still has norm 2. The proof produces a different input <i>w</i> with stretch at least \(\sigma_{k+1}\), and that is enough.</p></div></details>
+</div>
+
+<script>
+window.MathJax = { tex: { inlineMath: [["\\(", "\\)"]], displayMath: [["\\[", "\\]"]] }, svg: { fontCache: "global" } };
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-svg.js" async></script>
+
+<script>
+(() => {
+  const f = (x, d = 3) => (Math.abs(x) < 5e-10 ? 0 : x).toFixed(d).replace("-", "−");
+  const vec = (v, d = 3) => `(${v.map(x => f(x, d)).join(", ")})`;
+  const C = () => ({ ink: cssVar("--ink"), ink2: cssVar("--ink-2"), ink3: cssVar("--ink-3"), rule: cssVar("--rule"), bg: cssVar("--bg"),
+    s1: cssVar("--s1"), s2: cssVar("--s2"), s3: cssVar("--s3") });
+  const plain = html => { const d = document.createElement("div"); d.innerHTML = html; return d.textContent.replace(/\s+/g, " ").trim(); };
+  function liveFor(widget) { const r = el("p", { class: "sr-only", "aria-live": "polite" }); widget.append(r); const a = makeAnnouncer(r); return html => a(plain(html)); }
+  function setup(cv) {
+    const dpr = window.devicePixelRatio || 1, w = cv.clientWidth, h = cv.clientHeight;
+    if (cv.width !== Math.round(w * dpr) || cv.height !== Math.round(h * dpr)) { cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); }
+    const ctx = cv.getContext("2d"); ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, w, h);
+    return { ctx, w, h };
+  }
+  function arrow(ctx, a, b, color, lw, label, labelOff = 14) {
+    const dx = b[0] - a[0], dy = b[1] - a[1], L = Math.hypot(dx, dy);
+    ctx.strokeStyle = color; ctx.fillStyle = color; ctx.lineWidth = lw;
+    ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke();
+    if (L > 6) { const ux = dx / L, uy = dy / L, s = 7 + lw * 1.5;
+      ctx.beginPath(); ctx.moveTo(b[0], b[1]); ctx.lineTo(b[0] - s * ux - s * .45 * uy, b[1] - s * uy + s * .45 * ux); ctx.lineTo(b[0] - s * ux + s * .45 * uy, b[1] - s * uy - s * .45 * ux); ctx.closePath(); ctx.fill(); }
+    if (label) { ctx.font = "600 15px system-ui, sans-serif"; ctx.fillText(label, b[0] + (L ? dx / L : 0) * labelOff - 6, b[1] + (L ? dy / L : 0) * labelOff + 5); }
+  }
+  /* graph of a nonnegative function g(deg) for deg in [d0, d1], with dashed reference lines */
+  function anglePlot(cv, c, { d0, d1, g, cur, lines = [] }) {
+    const { ctx, w, h } = setup(cv), l = 34, r = 12, t = 14, b = 24;
+    let top = 1; for (let d = d0; d <= d1; d++) top = Math.max(top, g(d)); top *= 1.15;
+    const X = d => l + (w - l - r) * (d - d0) / (d1 - d0), Y = v => h - b - (h - t - b) * v / top;
+    ctx.fillStyle = c.bg; ctx.fillRect(0, 0, w, h); ctx.strokeStyle = c.rule; ctx.lineWidth = 1; ctx.font = "12px system-ui, sans-serif"; ctx.fillStyle = c.ink3;
+    for (let d = d0; d <= d1; d += 45) { ctx.beginPath(); ctx.moveTo(X(d), t); ctx.lineTo(X(d), h - b); ctx.stroke(); ctx.fillText(String(d).replace("-", "−") + "°", X(d) - (d === d1 ? 26 : d === d0 ? 0 : 12), h - 6); }
+    const step = top > 6 ? 2 : 1;
+    for (let v = 0; v <= top; v += step) { ctx.beginPath(); ctx.moveTo(l, Y(v)); ctx.lineTo(w - r, Y(v)); ctx.stroke(); ctx.fillText(String(v), 8, Y(v) + 4); }
+    ctx.setLineDash([5, 4]); ctx.lineWidth = 1.3; ctx.font = "600 12px system-ui, sans-serif";
+    for (const L of lines) { ctx.strokeStyle = L.color; ctx.beginPath(); ctx.moveTo(l, Y(L.v)); ctx.lineTo(w - r, Y(L.v)); ctx.stroke();
+      ctx.fillStyle = L.color; const tw = ctx.measureText(L.text).width; const yb = Y(L.v) + 15, below = L.below && yb < h - b - 2; ctx.fillText(L.text, w - r - tw - 4, below ? yb : Y(L.v) - 5); }
+    ctx.setLineDash([]);
+    ctx.strokeStyle = c.ink2; ctx.lineWidth = 2; ctx.beginPath();
+    for (let d = d0; d <= d1; d += 0.5) { const v = g(d); d > d0 ? ctx.lineTo(X(d), Y(v)) : ctx.moveTo(X(d), Y(v)); } ctx.stroke();
+    ctx.strokeStyle = c.ink; ctx.lineWidth = 2.2; ctx.beginPath(); ctx.arc(X(cur), Y(g(cur)), 6, 0, 2 * Math.PI); ctx.stroke();
+  }
+
+  /* ---------- Explorers 1 and 2: stretch around the unit circle (2 x 2) ---------- */
+  function stretchExplorer(root, o) {
+    const q = r => root.querySelector(`[data-role="${r}"]`);
+    const plane = q("plane"), plot = q("plot"), facts = q("facts"), narr = q("narr"), presets = q("presets");
+    const say = liveFor(root);
+    let P0 = o.presets[0], M = P0.M, th = o.start, dragging = false;
+    const mv = x => [M[0][0] * x[0] + M[0][1] * x[1], M[1][0] * x[0] + M[1][1] * x[1]];
+    const stretch = t => Math.hypot(...mv([Math.cos(t), Math.sin(t)]));
+    const extremes = () => { let hi = [0, -1], lo = [0, Infinity];
+      for (let i = 0; i < 3600; i++) { const t = i * Math.PI / 3600, s = stretch(t); if (s > hi[1] + 1e-12) hi = [t, s]; if (s < lo[1] - 1e-12) lo = [t, s]; }
+      return { hi, lo }; };
+    o.presets.forEach((p, i) => {
+      const b = el("button", { type: "button", "aria-pressed": String(i === 0), html: p.label });
+      b.addEventListener("click", () => { P0 = p; M = p.M; presets.querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", String(x === b))); draw(true); });
+      presets.append(b);
+    });
+    plane.setAttribute("aria-label", `Unit circle with the input ${o.xname} and its image under ${o.mname}. Drag, or focus and use the arrow keys, to turn ${o.xname}. Shift turns faster.`);
+    plot.setAttribute("aria-label", `Graph of how much ${o.mname} stretches each direction, for angles from 0 to 180 degrees.`);
+    function draw(announce) {
+      const c = C(), { hi, lo } = extremes(), x = [Math.cos(th), Math.sin(th)], Mx = mv(x), s = Math.hypot(...Mx);
+      { const { ctx, w, h } = setup(plane), R = Math.max(hi[1], 1) * 1.22, sc = Math.min(w, h) / (2 * R), cx = w / 2, cy = h / 2;
+        const P = v => [cx + v[0] * sc, cy - v[1] * sc];
+        ctx.fillStyle = c.bg; ctx.fillRect(0, 0, w, h);
+        ctx.strokeStyle = c.rule; ctx.lineWidth = .7;
+        for (let g = -Math.floor(R); g <= R; g++) { const a = P([g, 0]), b = P([0, g]); ctx.beginPath(); ctx.moveTo(a[0], 0); ctx.lineTo(a[0], h); ctx.moveTo(0, b[1]); ctx.lineTo(w, b[1]); ctx.stroke(); }
+        ctx.strokeStyle = c.ink3; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(0, cy); ctx.lineTo(w, cy); ctx.moveTo(cx, 0); ctx.lineTo(cx, h); ctx.stroke();
+        ctx.fillStyle = c.ink3; ctx.font = "12px system-ui, sans-serif"; ctx.fillText("1", P([1, 0])[0] - 3, cy + 14);
+        ctx.setLineDash([4, 4]); ctx.strokeStyle = c.ink3; ctx.lineWidth = 1.2; ctx.beginPath();
+        for (let i = 0; i <= 200; i++) { const t = 2 * Math.PI * i / 200, p = P([Math.cos(t), Math.sin(t)]); i ? ctx.lineTo(...p) : ctx.moveTo(...p); } ctx.stroke(); ctx.setLineDash([]);
+        ctx.strokeStyle = c.s1; ctx.lineWidth = 2; ctx.beginPath();
+        for (let i = 0; i <= 200; i++) { const t = 2 * Math.PI * i / 200, p = P(mv([Math.cos(t), Math.sin(t)])); i ? ctx.lineTo(...p) : ctx.moveTo(...p); } ctx.stroke();
+        arrow(ctx, P([0, 0]), P(Mx), c.s1, 3, o.mname + o.xname);
+        arrow(ctx, P([0, 0]), P(x), c.ink, 2, o.xname);
+        const px = P(x); ctx.fillStyle = c.ink; ctx.beginPath(); ctx.arc(px[0], px[1], 6, 0, 2 * Math.PI); ctx.fill(); }
+      const deg = ((th * 180 / Math.PI) % 180 + 180) % 180;
+      const lines = [{ v: hi[1], color: c.s1, text: `largest stretch ${f(hi[1], 2)}` }];
+      if (o.showFloor) lines.push({ v: lo[1], color: c.s2, text: `smallest ${f(lo[1], 2)}`, below: true });
+      anglePlot(plot, c, { d0: 0, d1: 180, g: d => stretch(d * Math.PI / 180), cur: deg, lines });
+      facts.innerHTML = `<dt>${o.mname}</dt><dd>${P0.name}</dd><dt><i>${o.xname}</i></dt><dd>${vec(x)}</dd>` +
+        `<dt>stretch ‖${o.mname}<i>${o.xname}</i>‖</dt><dd><strong>${f(s)}</strong></dd><dt>‖${o.mname}‖<sub>2</sub> = largest stretch</dt><dd class="c1">${f(hi[1])}</dd>` +
+        (o.showFloor ? `<dt>smallest stretch</dt><dd class="c2">${f(lo[1])}</dd>` : "");
+      const msg = o.narrate({ s, hi: hi[1], lo: lo[1], p: P0 });
+      narr.innerHTML = msg; if (announce) say(msg);
+    }
+    const pointAt = e => { const r = plane.getBoundingClientRect(), dx = e.clientX - r.left - r.width / 2, dy = -(e.clientY - r.top - r.height / 2);
+      if (Math.hypot(dx, dy) > 3) { th = Math.atan2(dy, dx); draw(); } };
+    plane.addEventListener("pointerdown", e => { dragging = true; plane.setPointerCapture(e.pointerId); pointAt(e); });
+    plane.addEventListener("pointermove", e => { if (dragging) pointAt(e); });
+    plane.addEventListener("pointerup", () => { dragging = false; draw(true); });
+    plane.addEventListener("keydown", e => { const d = (e.shiftKey ? 15 : 3) * Math.PI / 180;
+      if (e.key === "ArrowLeft" || e.key === "ArrowUp") { th += d; draw(true); e.preventDefault(); }
+      if (e.key === "ArrowRight" || e.key === "ArrowDown") { th -= d; draw(true); e.preventDefault(); } });
+    q("tomax").addEventListener("click", () => { th = extremes().hi[0]; draw(true); });
+    q("tomin").addEventListener("click", () => { th = extremes().lo[0]; draw(true); });
+    return { draw };
+  }
+
+  const ex1 = stretchExplorer($("#w-stretch"), {
+    xname: "x", mname: "M", start: Math.PI / 4, showFloor: false,
+    presets: [
+      { label: "<i>M</i> = diag(3, 1)", name: "diag(3, 1)", M: [[3, 0], [0, 1]], key: "d31" },
+      { label: "<i>M</i> = diag(0, 2)", name: "diag(0, 2)", M: [[0, 0], [0, 2]], key: "zero" },
+    ],
+    narrate: ({ s, hi, p }) => {
+      if (p.key === "zero" && s < 2e-3) return `<strong>This input is sent to zero</strong>: a stretch of 0. The norm is still ${f(hi, 2)}, because (0, 1) is stretched by 2. One small stretch does not lower the largest.`;
+      const at = Math.abs(s - hi) < 2e-3 ? ` This input reaches the largest stretch, so ‖<i>M</i>‖<sub>2</sub> = ${f(hi, 2)}.` : ` Other inputs reach ${f(hi, 2)}, so ‖<i>M</i>‖<sub>2</sub> = ${f(hi, 2)} regardless.`;
+      return `<i>M</i> stretches this <i>x</i> by <strong>${f(s, 2)}</strong>.` + at;
+    },
+  });
+  const ex2 = stretchExplorer($("#w-floor"), {
+    xname: "w", mname: "A", start: Math.PI / 3, showFloor: true,
+    presets: [
+      { label: "<i>A</i> = diag(3, 2)", name: "diag(3, 2)", M: [[3, 0], [0, 2]], key: "diag" },
+      { label: "<i>A</i> = all ones", name: "rows (1, 1), (1, 1)", M: [[1, 1], [1, 1]], key: "ones" },
+    ],
+    narrate: ({ s, lo, p }) => {
+      if (p.key === "ones") return `The images of (1, 0) and (0, 1) are the same vector (1, 1), so they are not perpendicular, and they cancel for <i>w</i> = (1, −1)/√2. This <i>w</i> is stretched by <strong>${f(s, 3)}</strong>. The smallest stretch is ${f(lo, 2)}, even though (1, 0) and (0, 1) are each stretched by √2.`;
+      return `‖<i>Aw</i>‖² = 9<i>a</i>² + 4<i>b</i>² = <strong>${f(s * s, 3)}</strong>, which is at least 4<i>a</i>² + 4<i>b</i>² = 4. So ‖<i>Aw</i>‖ = ${f(s, 3)} ≥ 2.` +
+        (Math.abs(s - lo) < 2e-3 ? " This is the weakest direction: (0, 1), stretched by exactly 2." : "");
+    },
+  });
+
+  /* ---------- Explorer 3: Step 2, the dependence ---------- */
+  (() => {
+    const Bs = { notes: [[1, 1, 0], [2, 2, 0], [0, 0, 0]], a1: [[3, 0, 0], [0, 0, 0], [0, 0, 0]] };
+    let key = "notes";
+    const sth = $("#dth"), plot = $("#dplot"), facts = $("#dfacts"), narr = $("#dnarr"), say = liveFor($("#w-dep"));
+    const cols = () => { const B = Bs[key]; return [B.map(r => r[0]), B.map(r => r[1])]; };
+    const Bw = d => { const t = d * Math.PI / 180, [b1, b2] = cols(); return b1.map((x, i) => Math.cos(t) * x + Math.sin(t) * b2[i]); };
+    const zeroAngle = () => { let best = 0, bv = Infinity; for (let d = -90; d <= 90; d += 0.25) { const v = LA.norm2(Bw(d)); if (v < bv - 1e-12) { bv = v; best = d; } } return best; };
+    function upd(announce) {
+      const d = +sth.value, t = d * Math.PI / 180, w = [Math.cos(t), Math.sin(t), 0], out = Bw(d), n = LA.norm2(out), [b1, b2] = cols(), c = C();
+      $("#dtho").textContent = String(d).replace("-", "−") + "°";
+      anglePlot(plot, c, { d0: -90, d1: 90, g: x => LA.norm2(Bw(x)), cur: d, lines: [{ v: 0, color: c.s3, text: "Bw = 0" }] });
+      facts.innerHTML = `<dt><i>Bv</i><sub>1</sub></dt><dd>${vec(b1, 0)}</dd><dt><i>Bv</i><sub>2</sub></dt><dd>${vec(b2, 0)}</dd>` +
+        `<dt><i>w</i> = (cos θ, sin θ, 0)</dt><dd class="c3">${vec(w)}</dd><dt><i>Bw</i> = cos θ <i>Bv</i><sub>1</sub> + sin θ <i>Bv</i><sub>2</sub></dt><dd>${vec(out)}</dd><dt>‖<i>Bw</i>‖</dt><dd><strong>${f(n)}</strong></dd>`;
+      let msg;
+      if (n < 1e-9) msg = key === "notes"
+        ? `<span class="status good">B sends this w to zero.</span> Here <i>c</i><sub>1</sub> = cos θ and <i>c</i><sub>2</sub> = sin θ satisfy <i>c</i><sub>1</sub><i>Bv</i><sub>1</sub> + <i>c</i><sub>2</sub><i>Bv</i><sub>2</sub> = 0, because <i>Bv</i><sub>1</sub> = <i>Bv</i><sub>2</sub>. This is <i>w</i> = (1, −1, 0)/√2.`
+        : `<span class="status good">B sends this w to zero.</span> Here <i>Bv</i><sub>2</sub> = 0, so <i>c</i><sub>1</sub> = 0, <i>c</i><sub>2</sub> = 1 and <i>w</i> = <i>v</i><sub>2</sub> = (0, 1, 0).`;
+      else msg = `Both outputs lie on the line through ${vec(key === "notes" ? [1, 2, 0] : [1, 0, 0], 0)}, so as θ turns, <i>Bw</i> slides along that line and must pass through zero. Here ‖<i>Bw</i>‖ = ${f(n, 3)}.`;
+      narr.innerHTML = msg; if (announce) say(msg);
+      $$("#dpre button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.b === key)));
+    }
+    sth.addEventListener("input", () => upd(true));
+    $$("#dpre button").forEach(b => b.addEventListener("click", () => { key = b.dataset.b; upd(true); }));
+    $("#dsolve").addEventListener("click", () => { sth.value = Math.round(zeroAngle()); upd(true); });
+    window.__eyDep = upd;
+    upd(false);
+  })();
+
+  /* ---------- Explorer 4: the game in R^3 ---------- */
+  (() => {
+    const A = [[3, 0, 0], [0, 2, 0], [0, 0, 1]];
+    const cv = $("#gcv"), sth = $("#gth"), sph = $("#gph"), sum = $("#gsum"), say = liveFor($("#w-game"));
+    const add = (a, b) => a.map((x, i) => x + b[i]), sc = (k, a) => a.map(x => k * x), nrm = LA.norm2, dot = LA.dot;
+    const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+    const unit = a => sc(1 / nrm(a), a);
+    let mode = "notes", strong = 2, az = 0.55, elv = 0.42, best = Infinity, dragging = null;
+    const rOf = () => { const t = +sth.value * Math.PI / 180, p = +sph.value * Math.PI / 180; return [Math.cos(p) * Math.cos(t), Math.cos(p) * Math.sin(t), Math.sin(p)]; };
+    function makeB(r) {
+      if (mode === "notes") return [[1, 1, 0], [2, 2, 0], [0, 0, 0]];
+      const Ar = LA.mv(A, r); return Ar.map(ai => r.map(rj => ai * rj));      // B = (A r) r^T : rank one, null space = plane perpendicular to r
+    }
+    function solve() {
+      const r = mode === "notes" ? unit([1, 1, 0]) : rOf(), B = makeB(r), AmB = A.map((row, i) => row.map((a, j) => a - B[i][j]));
+      const b1 = B.map(row => row[0]), b2 = B.map(row => row[1]), normAB = LA.svals(AmB)[0], eps = 1e-9;
+      let c = null, kind;
+      if (strong === 2) {
+        if (nrm(b1) < eps && nrm(b2) < eps) { c = [0, 1]; kind = "flat"; }
+        else if (nrm(b1) < eps) { c = [1, 0]; kind = "line"; }
+        else { const beta = dot(b2, b1) / dot(b1, b1); c = [-beta, 1]; kind = "line"; }
+        c = sc(1 / nrm(c), c); if (c[0] < -1e-12 || (Math.abs(c[0]) < 1e-12 && c[1] < 0)) c = sc(-1, c);
+      } else kind = nrm(b1) < eps ? "axis-in" : "miss";
+      const w = strong === 2 ? [c[0], c[1], 0] : (kind === "axis-in" ? [1, 0, 0] : null);
+      return { r, B, b1, b2, c, w, kind, normAB };
+    }
+    const proj = (p, w, h, s) => { const x1 = Math.cos(az) * p[0] - Math.sin(az) * p[1], y1 = Math.sin(az) * p[0] + Math.cos(az) * p[1];
+      return [w / 2 + s * x1, h * 0.54 - s * (p[2] * Math.cos(elv) + y1 * Math.sin(elv))]; };
+    function quad(ctx, P, a, b, fill, stroke) {
+      const pts = [add(a, b), add(a, sc(-1, b)), add(sc(-1, a), sc(-1, b)), add(sc(-1, a), b)].map(P);
+      ctx.beginPath(); pts.forEach((p, i) => i ? ctx.lineTo(...p) : ctx.moveTo(...p)); ctx.closePath();
+      ctx.globalAlpha = .28; ctx.fillStyle = fill; ctx.fill(); ctx.globalAlpha = 1; ctx.strokeStyle = stroke; ctx.lineWidth = 1.2; ctx.stroke();
+    }
+    function draw(S) {
+      const c = C(), { ctx, w, h } = setup(cv), s = Math.min(w, h) * 0.3, P = p => proj(p, w, h, s);
+      ctx.fillStyle = c.bg; ctx.fillRect(0, 0, w, h);
+      ctx.setLineDash([3, 4]); ctx.strokeStyle = c.ink3; ctx.lineWidth = 1;
+      for (const [v, lab] of [[[1.55, 0, 0], "x"], [[0, 1.55, 0], "y"], [[0, 0, 1.45], "z"]]) {
+        const a = P(sc(-1, v)), b = P(v); ctx.beginPath(); ctx.moveTo(...a); ctx.lineTo(...b); ctx.stroke();
+        ctx.fillStyle = c.ink3; ctx.font = "13px system-ui, sans-serif"; ctx.fillText(lab, b[0] + 4, b[1] - 4); }
+      ctx.setLineDash([]);
+      if (strong === 2) quad(ctx, P, [1.15, 0, 0], [0, 1.15, 0], c.s1, c.s1);
+      else { ctx.strokeStyle = c.s1; ctx.lineWidth = 5; ctx.globalAlpha = .75; const a = P([-1.35, 0, 0]), b = P([1.35, 0, 0]); ctx.beginPath(); ctx.moveTo(...a); ctx.lineTo(...b); ctx.stroke(); ctx.globalAlpha = 1; }
+      const p = unit(Math.abs(S.r[2]) < .9 ? cross(S.r, [0, 0, 1]) : cross(S.r, [1, 0, 0])), q = cross(S.r, p);
+      quad(ctx, P, sc(1.15, p), sc(1.15, q), c.s2, c.s2);
+      if (S.w) {
+        if (S.kind === "line") { ctx.strokeStyle = c.ink; ctx.lineWidth = 2.5; const a = P(sc(-1.5, S.w)), b = P(sc(1.5, S.w)); ctx.beginPath(); ctx.moveTo(...a); ctx.lineTo(...b); ctx.stroke(); }
+        arrow(ctx, P([0, 0, 0]), P(S.w), c.s3, 3.5, "w", 16);
+      }
+      ctx.fillStyle = c.ink; ctx.beginPath(); ctx.arc(...P([0, 0, 0]), 3, 0, 2 * Math.PI); ctx.fill();
+      ctx.font = "600 12.5px system-ui, sans-serif";
+      ctx.fillStyle = c.s1; ctx.fillText(strong === 2 ? "S (xy-plane): A strong" : "S (x-axis only)", 10, h - 30);
+      ctx.fillStyle = c.s2; ctx.fillText("null space of B", 10, h - 12);
+    }
+    function upd(announce) {
+      $("#gtho").textContent = sth.value + "°"; $("#gpho").textContent = sph.value + "°";
+      const S = solve(); draw(S);
+      $("#gmat").replaceChildren(matTable(S.B, { label: "B", fmtf: v => f(v, 2), cap: "<i>B</i> (rank one)" }));
+      let rows = `<dt><i>Bv</i><sub>1</sub></dt><dd>${vec(S.b1, 2)}</dd><dt><i>Bv</i><sub>2</sub></dt><dd>${vec(S.b2, 2)}</dd>`, msg;
+      if (S.w) {
+        const Aw = LA.mv(A, S.w), e = nrm(Aw);
+        if (S.kind !== "axis-in") best = Math.min(best, e);
+        if (S.c) rows += `<dt>(<i>c</i><sub>1</sub>, <i>c</i><sub>2</sub>)</dt><dd>${vec(S.c)}</dd>`;
+        rows += `<dt><i>w</i></dt><dd class="c3">${vec(S.w)}</dd><dt><i>Bw</i></dt><dd>${vec(LA.mv(S.B, S.w))}</dd>` +
+          `<dt>‖(<i>A</i> − <i>B</i>)<i>w</i>‖ = ‖<i>Aw</i>‖</dt><dd><strong>${f(e)}</strong> <span class="good">≥ 2 ✓</span></dd><dt>‖<i>A</i> − <i>B</i>‖<sub>2</sub> (largest stretch)</dt><dd>${f(S.normAB)}</dd>`;
+        msg = S.kind === "flat"
+          ? `Here <i>Bv</i><sub>1</sub> = <i>Bv</i><sub>2</sub> = 0: <i>B</i> is blind on the whole <i>xy</i>-plane, so any <i>c</i> works. The weakest choice is <i>w</i> = (0, 1, 0), with ‖<i>Aw</i>‖ = 2. The error is still at least 2.`
+          : S.kind === "axis-in"
+          ? `This <i>B</i> happens to have <i>Bv</i><sub>1</sub> = 0, so <i>w</i> = <i>v</i><sub>1</sub> works and the error is at least 3. Turn or tilt the null space even slightly and <i>Bv</i><sub>1</sub> is no longer zero.`
+          : `<i>Bv</i><sub>1</sub> and <i>Bv</i><sub>2</sub> lie on one line, and <i>c</i> = ${vec(S.c, 2)} makes <i>c</i><sub>1</sub><i>Bv</i><sub>1</sub> + <i>c</i><sub>2</sub><i>Bv</i><sub>2</sub> = 0. The matching <i>w</i> lies where the two planes cross. <i>A</i> stretches it by <strong>${f(e, 3)}</strong>, so ‖<i>A</i> − <i>B</i>‖<sub>2</sub> ≥ ${f(e, 3)} ≥ 2.` +
+            (Math.abs(e - 2) < 1e-6 ? " This is the best <i>B</i> can do: <i>w</i> lands on <i>v</i><sub>2</sub>, the weakest direction in <i>S</i>." : "");
+      } else {
+        rows += `<dt><i>w</i></dt><dd class="bad">none: <i>Bv</i><sub>1</sub> ≠ 0</dd><dt>‖<i>A</i> − <i>B</i>‖<sub>2</sub></dt><dd>${f(S.normAB)}</dd>`;
+        msg = `<span class="status bad">The proof fails here.</span> With only <i>v</i><sub>1</sub>, Step 2 needs <i>Bv</i><sub>1</sub> = 0, but <i>Bv</i><sub>1</sub> = ${vec(S.b1, 2)}. One output in a one-dimensional space need not be dependent. Using <i>k</i> + 1 = 2 directions is what forces a dependence.`;
+      }
+      $("#gfacts").innerHTML = rows;
+      sum.innerHTML = msg; if (announce) say(msg);
+      $("#grec").innerHTML = isFinite(best) ? `Smallest error you have produced so far with <i>S</i> = <i>xy</i>-plane: <strong>${f(best)}</strong>. It can reach 2 but never go below.` : "";
+      $$("#gpre button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.p === mode)));
+      cv.setAttribute("aria-label", `Three-dimensional view. Blue: S, the ${strong === 2 ? "xy-plane" : "x-axis"}. Orange: the null space of B, the plane perpendicular to ${vec(S.r, 2)}.` + (S.w ? ` Green: w = ${vec(S.w, 2)}.` : " They share only the origin."));
+    }
+    const setTP = (t, p) => { sth.value = t; sph.value = p; };
+    $$("#gpre button").forEach(b => b.addEventListener("click", () => {
+      const p = b.dataset.p;
+      if (p === "notes") { mode = "notes"; setTP(45, 0); }
+      else if (p === "a1") { mode = "a1"; setTP(0, 0); }
+      else if (p === "flat") { mode = "flat"; setTP(0, 90); }
+      else { mode = "rand"; setTP(Math.floor(Math.random() * 180), Math.floor(Math.random() * 161) - 80); }
+      upd(true);
+    }));
+    [sth, sph].forEach(s => s.addEventListener("input", () => { mode = "slider"; upd(true); }));
+    $("#gS2").addEventListener("click", () => { strong = 2; $("#gS2").setAttribute("aria-pressed", "true"); $("#gS1").setAttribute("aria-pressed", "false"); upd(true); });
+    $("#gS1").addEventListener("click", () => { strong = 1; $("#gS1").setAttribute("aria-pressed", "true"); $("#gS2").setAttribute("aria-pressed", "false"); upd(true); });
+    cv.addEventListener("pointerdown", e => { dragging = [e.clientX, e.clientY, az, elv]; cv.setPointerCapture(e.pointerId); cv.style.cursor = "grabbing"; });
+    cv.addEventListener("pointermove", e => { if (!dragging) return; az = dragging[2] + (e.clientX - dragging[0]) * 0.01; elv = Math.max(-0.2, Math.min(1.35, dragging[3] + (e.clientY - dragging[1]) * 0.01)); upd(false); });
+    cv.addEventListener("pointerup", () => { dragging = null; cv.style.cursor = ""; });
+    cv.addEventListener("keydown", e => { const d = e.shiftKey ? 0.3 : 0.08;
+      if (e.key === "ArrowLeft") az -= d; else if (e.key === "ArrowRight") az += d;
+      else if (e.key === "ArrowUp") elv = Math.min(1.35, elv + d); else if (e.key === "ArrowDown") elv = Math.max(-0.2, elv - d); else return;
+      e.preventDefault(); upd(false); });
+    window.__eyGame = upd;
+    upd(false);
+  })();
+
+  const redraw = () => { ex1.draw(); ex2.draw(); window.__eyDep && window.__eyDep(false); window.__eyGame && window.__eyGame(false); };
+  new ResizeObserver(redraw).observe(document.body);
+  matchMedia("(prefers-color-scheme: dark)").addEventListener("change", redraw);
+  new MutationObserver(redraw).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+})();
+</script>
+
+</main>
+<footer class="site">Interactive companion to the course notes. Every number on this page is computed live in your browser in IEEE double precision &mdash; the same arithmetic NumPy uses.</footer>
+</div>
+</body>
+</html>

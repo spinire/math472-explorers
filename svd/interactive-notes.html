@@ -430,8 +430,8 @@ ol li, ul li { margin: 2px 0; }
 
 <!-- ================= 11 ================= -->
 <h2 id="pca">11. Fitting a line when both coordinates are noisy: PCA</h2>
-<p>Least squares minimizes <strong>vertical</strong> distances, treating \(x\) as exact. When both coordinates have errors, the fairer choice is <strong>perpendicular</strong> distance. Take four centered points (their average is the origin), as the rows of \(X\):</p>
-\[(2,1),\quad(1,2),\quad(-1,-2),\quad(-2,-1).\]
+<p>Least squares minimizes <strong>vertical</strong> distances, treating \(x\) as exact. When both coordinates have errors, the fairer choice is <strong>perpendicular</strong> distance. Take the six centered points from the notes (their average is the origin), as the rows of \(X\):</p>
+\[(1,3),\quad(2,1),\quad(3,2),\quad(-1,-3),\quad(-2,-1),\quad(-3,-2).\]
 <div class="card">
   <div class="slider-row"><label for="pcPhi">angle \(=\)</label><input type="range" id="pcPhi" min="0" max="179" step="1" value="15"><span class="val" id="pcPhiv"></span></div>
   <div class="slider-row"><label><input type="checkbox" id="pcLS" class="cb"> Show the two least-squares lines</label></div>
@@ -444,7 +444,9 @@ ol li, ul li { margin: 2px 0; }
     </div>
   </div>
 </div>
-<p>Projecting each point onto a line through the origin gives a rank-one approximation of \(X\), and its error \(\|X-X_1\|_F^2\) is the sum of squared perpendicular distances. By Eckart–Young the best line is along \(v_1\), and the minimum is \(\sigma_2^2\).</p>
+<p>For a line in the direction of a unit vector \(w\), each point \(p_i\) splits into a piece along the line and a perpendicular gap \(d_i\), so \(\|p_i\|^2=(p_i\cdot w)^2+d_i^2\). Adding over the points,</p>
+\[\|X\|_F^2=\|Xw\|^2+\left(d_1^2+d_2^2+\cdots\right),\]
+<p>and the left side (\(56\) here) does not depend on the line. So the gaps are smallest exactly where \(\|Xw\|\) is largest: along \(v_1\), where they add up to \(\|X\|_F^2-\sigma_1^2=\sigma_2^2\). Projecting each point onto the line gives a rank-one approximation of \(X\), and by Eckart–Young no rank-one matrix comes closer.</p>
 <div class="q" data-q="p1"></div>
 <div class="reveal" data-after="p1"><div class="q" data-q="p2"></div></div>
 <h3>Principal component analysis</h3>
@@ -453,7 +455,7 @@ ol li, ul li { margin: 2px 0; }
 <div class="q" data-q="p3"></div>
 <div class="q" data-q="p4"></div>
 <div class="q" data-q="p5"></div>
-<p class="see">More: Notes Part 2, “Fitting a line when both coordinates are noisy” and “Principal component analysis”; the <a href="https://spinire.github.io/math472-explorers/svd/pca.html" target="_blank" rel="noopener">PCA explorer</a>.</p>
+<p class="see">More: Notes Part 2, “Fitting a line when both coordinates are noisy” and “Principal component analysis”; the <a href="https://spinire.github.io/math472-explorers/svd/fitting-line.html" target="_blank" rel="noopener">line-fitting explorer</a> makes Figures 6–8 live.</p>
 
 <!-- ================= 12 ================= -->
 <h2 id="checklist">12. Can you do these on paper?</h2>
@@ -479,7 +481,7 @@ ol li, ul li { margin: 2px 0; }
 
 /* ---------- Links to course material ---------- */
 const NOTES1 = 'https://canvas.umd.umich.edu/courses/552074/files/46356022?wrap=1';
-const NOTES2 = 'https://canvas.umd.umich.edu/courses/552074/files/46356023?wrap=1';
+const NOTES2 = 'https://canvas.umd.umich.edu/courses/552074/files/46396531?wrap=1';
 const EXP = 'https://spinire.github.io/math472-explorers/svd/';
 const a = (href, text) => `<a href="${href}" target="_blank" rel="noopener">${text}</a>`;
 const n1 = s => a(NOTES1, `Notes Part 1, “${s}”`);
@@ -745,21 +747,21 @@ const Q = {
     good: R`Error \(3\) out of \(5\): \(60\%\). The singular values tell you this without building \(A_1\).` },
 
   /* ---- 11. PCA ---- */
-  p1: { kind: 'Computation', type: 'num', prompt: R`For the four points, least squares fitting \(y\approx mx\) gives \(m=\dfrac{\sum x_iy_i}{\sum x_i^2}\). Find \(m\). Fitting \(x\approx m'y\) instead gives \(m'=0.8\): what slope is that as a line for \(y\)?`,
-    fields: [ { label: R`\(m =\)`, ans: 0.8 }, { label: R`slope of \(x=m'y\) \(=\)`, ans: 1.25 } ],
+  p1: { kind: 'Computation', type: 'num', prompt: R`For the six points, least squares fitting \(y\approx mx\) gives \(m=\dfrac{\sum x_iy_i}{\sum x_i^2}\). Find \(m\). Fitting \(x\approx m'y\) instead gives the same number, \(m'=m\): what slope is that as a line for \(y\)?`,
+    fields: [ { label: R`\(m =\)`, ans: 22 / 28 }, { label: R`slope of \(x=m'y\) \(=\)`, ans: 28 / 22 } ],
     hint: (v, ok) => {
-      if (!ok[0]) return R`\(\sum x_iy_i=2+2+2+2=8\) and \(\sum x_i^2=4+1+1+4=10\).`;
-      return R`\(x=0.8y\) means \(y=x/0.8\).`;
+      if (!ok[0]) return R`\(\sum x_iy_i=2(3+2+6)=22\) and \(\sum x_i^2=2(1+4+9)=28\).`;
+      return R`\(x=m'y\) means \(y=x/m'\), so the slope is \(28/22\).`;
     },
-    good: R`Two different lines (\(0.8\) and \(1.25\)), because each treats a different coordinate as exact. Tick “Show the two least-squares lines” above.` },
+    good: R`Two different lines (\(0.79\) and \(1.27\)), because each treats a different coordinate as exact. Tick “Show the two least-squares lines” above.` },
 
-  p2: { kind: 'Computation', type: 'num', prompt: R`\(X^TX=\begin{pmatrix}10&8\\8&10\end{pmatrix}\), with eigenvalues \(18\) and \(2\). Find \(\sigma_1\), \(\sigma_2\), and the smallest possible sum of squared perpendicular distances.`,
-    fields: [ { label: R`\(\sigma_1 =\)`, ans: Math.sqrt(18), tol: 0.003 }, { label: R`\(\sigma_2 =\)`, ans: S2, tol: 0.003 }, { label: R`smallest sum \(=\)`, ans: 2, tol: 1e-3 } ],
+  p2: { kind: 'Computation', type: 'num', prompt: R`\(X^TX=\begin{pmatrix}28&22\\22&28\end{pmatrix}\), with eigenvalues \(50\) and \(6\). Find \(\sigma_1\), \(\sigma_2\), and the smallest possible sum of squared perpendicular distances.`,
+    fields: [ { label: R`\(\sigma_1 =\)`, ans: Math.sqrt(50), tol: 0.003 }, { label: R`\(\sigma_2 =\)`, ans: Math.sqrt(6), tol: 0.003 }, { label: R`smallest sum \(=\)`, ans: 6, tol: 1e-3 } ],
     hint: (v, ok) => {
-      if (ok[0] && ok[1] && near(v[2], S2, 0.003)) return R`The sum of <em>squared</em> distances is \(\sigma_2^2\).`;
+      if (ok[0] && ok[1] && near(v[2], Math.sqrt(6), 0.003)) return R`The sum of <em>squared</em> distances is \(\sigma_2^2\).`;
       return R`\(\sigma_i=\sqrt{\lambda_i}\), and the minimum is \(\sigma_2^2\). Find it with the slider too.`;
     },
-    good: R`\(\sigma_1=3\sqrt2\), \(\sigma_2=\sqrt2\), minimum \(2\) along \(v_1=\tfrac{1}{\sqrt2}(1,1)\): slope \(1\).` },
+    good: R`\(\sigma_1=5\sqrt2\), \(\sigma_2=\sqrt6\), minimum \(6\) along \(v_1=\tfrac{1}{\sqrt2}(1,1)\): slope \(1\). The gaps take \(6/56\approx11\%\) of the total; the line keeps \(89\%\).` },
 
   p3: { kind: 'Concept check', prompt: R`Why center the data before taking the SVD?`, opts: [
     { t: R`Otherwise \(v_1\) is pulled toward the average of the data instead of following its spread.`, ok: true, fb: R`Right. The SVD finds subspaces through the origin; centering puts the data cloud there.` },
@@ -1166,7 +1168,7 @@ function svdJ(A0) {
 /* ---------- Section 11: best line ---------- */
 (function () {
   const sl = $id('pcPhi'), cb = $id('pcLS'), svg = $id('pcSvg');
-  const P = [[2, 1], [1, 2], [-1, -2], [-2, -1]], L = 3;
+  const P = [[1, 3], [2, 1], [3, 2], [-1, -3], [-2, -1], [-3, -2]], L = 4;
   function draw() {
     const ph = +sl.value, d = [Math.cos(deg(ph)), Math.sin(deg(ph))];
     $id('pcPhiv').textContent = ph + '°'; $id('pcA').textContent = ph + '°' + (ph === 90 ? ' (vertical)' : `, slope ${fmt2(Math.tan(deg(ph)))}`);
@@ -1175,13 +1177,13 @@ function svdJ(A0) {
     let S = 0;
     P.forEach(p => { const t = p[0] * d[0] + p[1] * d[1], q = [t * d[0], t * d[1]]; S += (p[0] - q[0]) ** 2 + (p[1] - q[1]) ** 2;
       el('line', { x1: f.X(p[0]), y1: f.Y(p[1]), x2: f.X(q[0]), y2: f.Y(q[1]), stroke: 'var(--bad)', 'stroke-width': 2 }, svg); });
-    if (cb.checked) [[0.8, 'var(--c1)'], [1.25, 'var(--c3)']].forEach(([m, c]) => el('line', { x1: f.X(-L), y1: f.Y(-m * L), x2: f.X(L), y2: f.Y(m * L), stroke: c, 'stroke-width': 1.8, 'stroke-dasharray': '6 4' }, svg));
+    if (cb.checked) [[22 / 28, 'var(--c1)'], [28 / 22, 'var(--c3)']].forEach(([m, c]) => el('line', { x1: f.X(-L), y1: f.Y(-m * L), x2: f.X(L), y2: f.Y(m * L), stroke: c, 'stroke-width': 1.8, 'stroke-dasharray': '6 4' }, svg));
     el('line', { x1: f.X(-2 * L * d[0]), y1: f.Y(-2 * L * d[1]), x2: f.X(2 * L * d[0]), y2: f.Y(2 * L * d[1]), stroke: 'var(--ink)', 'stroke-width': 2.2 }, svg);
     P.forEach(p => el('circle', { cx: f.X(p[0]), cy: f.Y(p[1]), r: 5, fill: 'var(--ink)' }, svg));
     $id('pcS').textContent = fmt2(S);
     const m = $id('pcMsg');
-    if (ph === 45) { m.textContent = 'Minimum: the v₁ line, slope 1. The sum is σ₂² = 2.'; m.style.color = 'var(--good)'; }
-    else { m.textContent = cb.checked ? 'Dashed: least squares y on x (slope 0.8, blue) and x on y (slope 1.25, orange). Neither minimizes perpendicular distance.' : 'Find the angle that makes the sum smallest.'; m.style.color = 'var(--muted)'; }
+    if (ph === 45) { m.textContent = 'Minimum: the v₁ line, slope 1. The sum is σ₂² = 6.'; m.style.color = 'var(--good)'; }
+    else { m.textContent = cb.checked ? 'Dashed: least squares y on x (slope 0.79, blue) and x on y (slope 1.27, orange). Neither minimizes perpendicular distance.' : 'Find the angle that makes the sum smallest.'; m.style.color = 'var(--muted)'; }
   }
   sl.addEventListener('input', draw); cb.addEventListener('change', draw); draw();
 })();

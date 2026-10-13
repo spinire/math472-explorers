@@ -428,7 +428,8 @@ function gauss(rand) { let u = 0; while (u === 0) u = rand(); return Math.sqrt(-
   <li style="margin:1rem 0"><a href="ellipse.html"><strong>What a matrix does to a circle</strong></a><br><span class="muted">Drag a vector around the unit circle and step through split, stretch, add: <i>A</i> = <i>U</i>&Sigma;<i>V</i><sup>T</sup> one stage at a time. Goes with Part 1 of the notes.</span></li>
   <li style="margin:1rem 0"><a href="noise.html"><strong>Why small singular values amplify noise</strong></a><br><span class="muted">Least squares in SVD coordinates divides noise by each &sigma;. Watch a cloud of noisy solutions stretch as the columns become parallel. Part 1.</span></li>
   <li style="margin:1rem 0"><a href="compression.html"><strong>Layers of a picture</strong></a><br><span class="muted">Keep the first <i>k</i> layers of an image, including one of your own, and check the Eckart&ndash;Young error prediction against the pixels. Part 2.</span></li>
-  <li style="margin:1rem 0"><a href="pca.html"><strong>The best line through a cloud</strong></a><br><span class="muted">Drag data points and compare the least-squares lines with the <i>v</i><sub>1</sub> line, then try to beat it. Part 2.</span></li>
+  <li style="margin:1rem 0"><a href="fitting-line.html"><strong>Fitting a line when both coordinates are noisy</strong></a><br><span class="muted">The notes&rsquo; three pictures, live: vertical, horizontal and perpendicular gaps; the Pythagoras trade-off that makes <i>v</i><sub>1</sub> the best line; and a noisy cloud with adjustable noise in each coordinate. Part 2.</span></li>
+  <li style="margin:1rem 0"><a href="eckart-young.html"><strong>Eckart&ndash;Young in the 2-norm</strong></a><br><span class="muted">The proof that truncating the SVD is the best rank-<i>k</i> approximation, with live examples: play the opponent, choose <i>B</i>, and try to push the error below &sigma;<sub><i>k</i>+1</sub>. Part 2.</span></li>
 </ol>
 
 </main>

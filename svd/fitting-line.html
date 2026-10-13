@@ -1,0 +1,715 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fitting a Line, Visually</title>
+<meta name="description" content="The pictures behind fitting a line when both coordinates are noisy: vertical, horizontal and perpendicular gaps, the Pythagoras trade-off that makes v1 the best line, and a noisy cloud that leads into PCA.">
+<style>
+:root {
+  color-scheme: light;
+  --bg: #fcfcfb;
+  --surface: #f3f2ef;
+  --ink: #111110;
+  --ink-2: #4a4946;
+  --ink-3: #6b6a66;
+  --rule: #d9d7d1;
+  --accent: #1f64b8;
+  --s1: #2a78d6;      /* blue: active row / series 1 */
+  --s2: #c9501f;      /* orange: pivot / series 2 */
+  --s3: #13875e;      /* aqua-green: L entries / series 3 */
+  --t1: #dbe8f8;      /* tints for cell highlights */
+  --t2: #fbe1d4;
+  --t3: #d5efe3;
+  --t4: #f5ecc8;
+  --focus: #1f64b8;
+  --maxw: 60rem;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #1a1a19;
+    --surface: #242422;
+    --ink: #f4f3ef;
+    --ink-2: #c3c2b7;
+    --ink-3: #a3a29a;
+    --rule: #3d3c39;
+    --accent: #7fb2f0;
+    --s1: #5a9cec;
+    --s2: #f08a5d;
+    --s3: #3cc392;
+    --t1: #1e3450;
+    --t2: #4a2a1b;
+    --t3: #173d2f;
+    --t4: #423a17;
+    --focus: #7fb2f0;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #1a1a19; --surface: #242422; --ink: #f4f3ef; --ink-2: #c3c2b7; --ink-3: #a3a29a;
+  --rule: #3d3c39; --accent: #7fb2f0; --s1: #5a9cec; --s2: #f08a5d; --s3: #3cc392;
+  --t1: #1e3450; --t2: #4a2a1b; --t3: #173d2f; --t4: #423a17; --focus: #7fb2f0;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html { background: var(--bg); }
+body {
+  margin: 0; background: var(--bg); color: var(--ink);
+  font: 17px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+.wrap { max-width: var(--maxw); margin: 0 auto; padding: 1.5rem 16px 4rem; }
+header.site { border-bottom: 1px solid var(--rule); margin-bottom: 2rem; padding-bottom: 1rem; }
+header.site .crumb { font-size: .9rem; color: var(--ink-3); margin: 0 0 .25rem; }
+header.site .crumb a { color: var(--ink-3); }
+h1 { font-size: 1.9rem; line-height: 1.2; margin: 0 0 .5rem; letter-spacing: -.01em; }
+h2 { font-size: 1.35rem; margin: 3rem 0 .5rem; line-height: 1.3; }
+h3 { font-size: 1.1rem; margin: 1.75rem 0 .4rem; }
+p { margin: .6rem 0; }
+.lede { font-size: 1.08rem; color: var(--ink-2); max-width: 44rem; }
+.muted { color: var(--ink-3); }
+a { color: var(--accent); }
+:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; border-radius: 3px; }
+.skip { position: absolute; left: -9999px; }
+.skip:focus { left: 1rem; top: 1rem; background: var(--bg); padding: .5rem; z-index: 10; }
+.panel { background: var(--surface); border-radius: 10px; padding: 1rem 1.1rem; margin: 1rem 0; overflow-x: auto; }
+.row { display: flex; flex-wrap: wrap; gap: 1.25rem; align-items: flex-start; }
+.col { flex: 1 1 18rem; min-width: 0; }
+.controls { display: flex; flex-wrap: wrap; gap: .5rem .75rem; align-items: center; margin: .75rem 0; }
+button, select, input[type=number], input[type=text] {
+  font: inherit; font-size: .95rem; color: var(--ink); background: var(--bg);
+  border: 1px solid var(--rule); border-radius: 7px; padding: .35rem .75rem; min-height: 2.25rem;
+}
+button { cursor: pointer; }
+button:hover:not(:disabled) { border-color: var(--ink-3); }
+button:disabled { opacity: .45; cursor: default; }
+button.primary { background: var(--accent); color: var(--bg); border-color: var(--accent); }
+input[type=number] { width: 5.5rem; }
+input[type=range] { accent-color: var(--accent); width: min(18rem, 100%); }
+label { font-size: .95rem; }
+.narr {
+  min-height: 4.5rem; border-left: 3px solid var(--accent); padding: .35rem .9rem; margin: .75rem 0;
+  background: var(--bg); border-radius: 0 6px 6px 0;
+}
+.narr strong { color: var(--ink); }
+.stepcount { font-size: .88rem; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.readout { font-variant-numeric: tabular-nums; }
+.readout dt { color: var(--ink-3); font-size: .88rem; }
+.readout dd { margin: 0 0 .5rem; font-size: 1.05rem; }
+.kv { display: grid; grid-template-columns: minmax(7rem, 48%) minmax(0, 1fr); gap: .15rem 1rem; font-variant-numeric: tabular-nums; }
+.kv > :nth-child(odd) { color: var(--ink-3); }
+.mono, code { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: .92em; }
+.math { font-family: "Cambria Math", "STIX Two Math", "Latin Modern Math", Georgia, serif; font-style: normal; }
+.math i, i.v { font-style: italic; }
+/* matrices */
+.mats { display: flex; flex-wrap: wrap; gap: 1rem 1.5rem; align-items: center; margin: .75rem 0; }
+.matwrap { display: inline-flex; flex-direction: column; align-items: center; gap: .2rem; }
+.matwrap .cap { font-size: .9rem; color: var(--ink-3); }
+table.mat { border-collapse: separate; border-spacing: 2px; position: relative; padding: 0 6px;
+  font-variant-numeric: tabular-nums; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: .92rem; }
+table.mat::before, table.mat::after { content: ""; position: absolute; top: 0; bottom: 0; width: 6px;
+  border: 1.5px solid var(--ink-2); }
+table.mat::before { left: 0; border-right: none; }
+table.mat::after { right: 0; border-left: none; }
+table.mat td { padding: .2rem .5rem; text-align: right; min-width: 3.2rem; border-radius: 4px;
+  transition: background-color .25s; }
+table.mat td.pivot { background: var(--t2); outline: 2px solid var(--s2); }
+table.mat td.hlrow { background: var(--t1); }
+table.mat td.src { background: var(--t4); }
+table.mat td.newL { background: var(--t3); outline: 2px solid var(--s3); }
+table.mat td.zeroed { color: var(--ink-3); }
+table.mat td.dim { color: var(--ink-3); opacity: .55; }
+table.mat td.done { background: var(--t3); }
+.op { font-size: 1.3rem; color: var(--ink-3); }
+/* legend chips */
+.legend { display: flex; flex-wrap: wrap; gap: .4rem 1rem; font-size: .88rem; color: var(--ink-2); margin: .25rem 0; }
+.chip { display: inline-block; width: .9rem; height: .9rem; border-radius: 3px; vertical-align: -2px; margin-right: .3rem; }
+/* svg */
+svg.plot { width: 100%; height: auto; display: block; overflow: visible; }
+svg.plot text { fill: var(--ink-2); font: 12px system-ui, sans-serif; }
+svg.plot .axis { stroke: var(--ink-3); stroke-width: 1; }
+svg.plot .grid { stroke: var(--rule); stroke-width: 1; }
+.fig { margin: .75rem 0; }
+.figcap { font-size: .9rem; color: var(--ink-3); margin-top: .35rem; }
+details { margin: .75rem 0; }
+summary { cursor: pointer; color: var(--accent); }
+.predict { background: var(--t4); border-radius: 8px; padding: .5rem .8rem; margin: .5rem 0; }
+.good { color: var(--s3); font-weight: 600; }
+.bad { color: var(--s2); font-weight: 600; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+nav.toc { font-size: .95rem; }
+nav.toc ol { padding-left: 1.2rem; margin: .25rem 0; }
+footer.site { margin-top: 4rem; padding-top: 1rem; border-top: 1px solid var(--rule); font-size: .88rem; color: var(--ink-3); }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+@media (max-width: 560px) { body { font-size: 16px; } h1 { font-size: 1.55rem; } table.mat td { min-width: 2.4rem; padding: .15rem .3rem; } }
+/* SVD explorers */
+canvas.plane { width: 100%; aspect-ratio: 1 / 1; display: block; touch-action: none; border-radius: 6px; background: var(--bg); }
+canvas.plane:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+.imgs { display: flex; flex-wrap: wrap; gap: 1rem; }
+.imgs figure { margin: 0; flex: 0 1 17rem; min-width: 0; }
+.imgs canvas { width: 100%; height: auto; display: block; border-radius: 4px; background: var(--bg); }
+.imgs figcaption { font-size: .9rem; color: var(--ink-3); margin-top: .3rem; font-variant-numeric: tabular-nums; }
+.seg { display: inline-flex; flex-wrap: wrap; gap: .35rem; }
+button[aria-pressed="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.recipe { display: grid; grid-template-columns: auto 1fr; gap: .3rem 1rem; font-variant-numeric: tabular-nums; font-size: .95rem; }
+.recipe > :nth-child(odd) { color: var(--ink-3); font-size: .88rem; }
+.c1 { color: var(--s1); } .c2 { color: var(--s2); } .c3 { color: var(--s3); }
+table.data { border-collapse: collapse; font-variant-numeric: tabular-nums; font-size: .95rem; margin: .5rem 0; }
+table.data th, table.data td { padding: .25rem .7rem; text-align: right; border-bottom: 1px solid var(--rule); }
+table.data th { color: var(--ink-3); font-weight: 500; }
+table.data th:first-child, table.data td:first-child { text-align: left; }
+
+</style>
+<script>
+/* ---------- shared helpers: numerics, formatting, DOM, SVG, stepper ---------- */
+"use strict";
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
+const el = (tag, attrs = {}, ...kids) => {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (k === "class") e.className = v; else if (k === "html") e.innerHTML = v;
+    else if (k.startsWith("on")) e.addEventListener(k.slice(2), v); else e.setAttribute(k, v);
+  }
+  for (const k of kids) if (k != null) e.append(k.nodeType ? k : document.createTextNode(k));
+  return e;
+};
+const SVGNS = "http://www.w3.org/2000/svg";
+const sv = (tag, attrs = {}, parent) => {
+  const e = document.createElementNS(SVGNS, tag);
+  for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
+  if (parent) parent.appendChild(e);
+  return e;
+};
+const cssVar = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+
+/* number formatting */
+function fmt(x, d = 4) {
+  if (!isFinite(x)) return x > 0 ? "∞" : (x < 0 ? "−∞" : "NaN");
+  if (x === 0) return "0";
+  const a = Math.abs(x);
+  let s;
+  if (a >= 1e5 || a < 1e-3) s = fmtExp(x, d);
+  else { s = (+x.toFixed(d)).toString(); }
+  return s.replace("-", "−");
+}
+function fmtExp(x, d = 3) {
+  if (x === 0) return "0";
+  const e = Math.floor(Math.log10(Math.abs(x)));
+  let m = x / Math.pow(10, e);
+  if (Math.abs(+m.toFixed(d - 1)) >= 10) { m /= 10; return fmtExp(x, d); }
+  return (+m.toFixed(d - 1)).toString().replace("-", "−") + "×10" + sup(e);
+}
+function sup(n) {
+  const m = { "-": "⁻", "0": "⁰", "1": "¹", "2": "²", "3": "³", "4": "⁴", "5": "⁵", "6": "⁶", "7": "⁷", "8": "⁸", "9": "⁹" };
+  return String(n).split("").map(c => m[c] || c).join("");
+}
+function fmtFrac(x) { // nice display for values that are near simple fractions/integers
+  if (Math.abs(x - Math.round(x)) < 1e-12) return String(Math.round(x)).replace("-", "−");
+  return fmt(x, 4);
+}
+
+/* ---------- linear algebra (dense, arrays of arrays) ---------- */
+const LA = {
+  clone: A => A.map(r => r.slice()),
+  eye: n => Array.from({ length: n }, (_, i) => Array.from({ length: n }, (_, j) => +(i === j))),
+  zeros: (m, n) => Array.from({ length: m }, () => new Array(n).fill(0)),
+  T: A => A[0].map((_, j) => A.map(r => r[j])),
+  mul(A, B) {
+    const m = A.length, k = B.length, n = B[0].length, C = LA.zeros(m, n);
+    for (let i = 0; i < m; i++) for (let p = 0; p < k; p++) { const a = A[i][p]; if (a) for (let j = 0; j < n; j++) C[i][j] += a * B[p][j]; }
+    return C;
+  },
+  mv: (A, x) => A.map(r => r.reduce((s, a, j) => s + a * x[j], 0)),
+  dot: (x, y) => x.reduce((s, a, i) => s + a * y[i], 0),
+  norm2: x => Math.hypot(...x),
+  norm1: x => x.reduce((s, a) => s + Math.abs(a), 0),
+  normInf: x => Math.max(...x.map(Math.abs)),
+  sub: (x, y) => x.map((a, i) => a - y[i]),
+  matNorm1: A => Math.max(...A[0].map((_, j) => A.reduce((s, r) => s + Math.abs(r[j]), 0))),
+  matNormInf: A => Math.max(...A.map(r => r.reduce((s, a) => s + Math.abs(a), 0))),
+  /* LU with optional partial pivoting; returns {L,U,perm,swaps} */
+  lu(A0, pivot = true) {
+    const n = A0.length, U = LA.clone(A0), L = LA.eye(n), perm = [...Array(n).keys()];
+    for (let k = 0; k < n - 1; k++) {
+      if (pivot) {
+        let p = k; for (let i = k + 1; i < n; i++) if (Math.abs(U[i][k]) > Math.abs(U[p][k])) p = i;
+        if (p !== k) { [U[k], U[p]] = [U[p], U[k]]; [perm[k], perm[p]] = [perm[p], perm[k]];
+          for (let j = 0; j < k; j++) [L[k][j], L[p][j]] = [L[p][j], L[k][j]]; }
+      }
+      for (let i = k + 1; i < n; i++) {
+        const m = U[i][k] / U[k][k]; L[i][k] = m;
+        for (let j = k; j < n; j++) U[i][j] -= m * U[k][j];
+        U[i][k] = 0;
+      }
+    }
+    return { L, U, perm };
+  },
+  fwd(L, b) { const n = b.length, y = new Array(n); for (let i = 0; i < n; i++) { let s = b[i]; for (let j = 0; j < i; j++) s -= L[i][j] * y[j]; y[i] = s / L[i][i]; } return y; },
+  back(U, y) { const n = y.length, x = new Array(n); for (let i = n - 1; i >= 0; i--) { let s = y[i]; for (let j = i + 1; j < n; j++) s -= U[i][j] * x[j]; x[i] = s / U[i][i]; } return x; },
+  solve(A, b, pivot = true) { const { L, U, perm } = LA.lu(A, pivot); return LA.back(U, LA.fwd(L, perm.map(i => b[i]))); },
+  /* Gauss–Jordan inverse with partial pivoting (the usual textbook inverse) */
+  inv(A0) {
+    const n = A0.length, M = A0.map((r, i) => [...r, ...LA.eye(n)[i]]);
+    for (let k = 0; k < n; k++) {
+      let p = k; for (let i = k + 1; i < n; i++) if (Math.abs(M[i][k]) > Math.abs(M[p][k])) p = i;
+      [M[k], M[p]] = [M[p], M[k]];
+      const d = M[k][k]; for (let j = 0; j < 2 * n; j++) M[k][j] /= d;
+      for (let i = 0; i < n; i++) if (i !== k) { const m = M[i][k]; if (m) for (let j = 0; j < 2 * n; j++) M[i][j] -= m * M[k][j]; }
+    }
+    return M.map(r => r.slice(n));
+  },
+  /* Cholesky solve (for normal equations) */
+  cholSolve(A, b) {
+    const n = A.length, L = LA.zeros(n, n);
+    for (let j = 0; j < n; j++) {
+      let s = A[j][j]; for (let k = 0; k < j; k++) s -= L[j][k] * L[j][k];
+      if (!(s > 0)) return null;
+      L[j][j] = Math.sqrt(s);
+      for (let i = j + 1; i < n; i++) { let t = A[i][j]; for (let k = 0; k < j; k++) t -= L[i][k] * L[j][k]; L[i][j] = t / L[j][j]; }
+    }
+    const y = LA.fwd(L, b); return LA.back(LA.T(L), y);
+  },
+  /* Householder QR least squares: returns x minimising ||Ax-b|| */
+  qrSolve(A0, b0) {
+    const m = A0.length, n = A0[0].length, A = LA.clone(A0), b = b0.slice();
+    for (let k = 0; k < n; k++) {
+      let nr = 0; for (let i = k; i < m; i++) nr += A[i][k] * A[i][k]; nr = Math.sqrt(nr);
+      if (nr === 0) continue;
+      const alpha = A[k][k] > 0 ? -nr : nr, v = new Array(m).fill(0);
+      v[k] = A[k][k] - alpha; for (let i = k + 1; i < m; i++) v[i] = A[i][k];
+      let vv = 0; for (let i = k; i < m; i++) vv += v[i] * v[i];
+      if (vv === 0) continue;
+      for (let j = k; j < n; j++) { let s = 0; for (let i = k; i < m; i++) s += v[i] * A[i][j]; s = 2 * s / vv; for (let i = k; i < m; i++) A[i][j] -= s * v[i]; }
+      let s = 0; for (let i = k; i < m; i++) s += v[i] * b[i]; s = 2 * s / vv; for (let i = k; i < m; i++) b[i] -= s * v[i];
+    }
+    const R = A.slice(0, n).map(r => r.slice(0, n));
+    return LA.back(R, b.slice(0, n));
+  },
+  /* singular values via one-sided Jacobi (accurate for small dense matrices) */
+  svals(A0) {
+    const m = A0.length, n = A0[0].length;
+    let U = A0.map(r => r.slice());
+    if (m < n) U = LA.T(U);
+    const cols = U[0].length, rows = U.length;
+    for (let sweep = 0; sweep < 60; sweep++) {
+      let off = 0;
+      for (let p = 0; p < cols - 1; p++) for (let q = p + 1; q < cols; q++) {
+        let a = 0, b = 0, c = 0;
+        for (let i = 0; i < rows; i++) { a += U[i][p] * U[i][p]; b += U[i][q] * U[i][q]; c += U[i][p] * U[i][q]; }
+        if (Math.abs(c) <= 1e-15 * Math.sqrt(a * b)) continue;
+        off = Math.max(off, Math.abs(c) / Math.sqrt(a * b));
+        const z = (b - a) / (2 * c), t = Math.sign(z || 1) / (Math.abs(z) + Math.sqrt(1 + z * z));
+        const cs = 1 / Math.sqrt(1 + t * t), sn = cs * t;
+        for (let i = 0; i < rows; i++) { const up = U[i][p], uq = U[i][q]; U[i][p] = cs * up - sn * uq; U[i][q] = sn * up + cs * uq; }
+      }
+      if (off < 1e-15) break;
+    }
+    const s = []; for (let j = 0; j < cols; j++) { let t = 0; for (let i = 0; i < rows; i++) t += U[i][j] * U[i][j]; s.push(Math.sqrt(t)); }
+    return s.sort((a, b) => b - a);
+  },
+  cond2(A) { const s = LA.svals(A); return s[0] / s[s.length - 1]; },
+};
+
+/* seeded PRNG so every student sees the same "random" numbers */
+function mulberry32(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+
+/* ---------- matrix rendering ---------- */
+/* cls(i,j) -> class name; fmtf(v,i,j) -> string */
+function matTable(M, { label = "matrix", cls = () => "", fmtf = v => fmtFrac(v), cap = null } = {}) {
+  const t = el("table", { class: "mat", "aria-label": `${label}, ${M.length} by ${M[0].length}` });
+  const tb = el("tbody"); t.append(tb);
+  M.forEach((r, i) => { const tr = el("tr"); r.forEach((v, j) => { const c = cls(i, j); tr.append(el("td", c ? { class: c } : {}, fmtf(v, i, j))); }); tb.append(tr); });
+  const w = el("div", { class: "matwrap" }, t);
+  if (cap) w.append(el("div", { class: "cap", html: cap }));
+  return w;
+}
+const colVec = x => x.map(v => [v]);
+
+/* ---------- linear scale + axes ---------- */
+function scale(d0, d1, r0, r1, log = false) {
+  if (log) { const a = Math.log10(d0), b = Math.log10(d1); const f = v => r0 + (Math.log10(v) - a) / (b - a) * (r1 - r0); f.inv = p => Math.pow(10, a + (p - r0) / (r1 - r0) * (b - a)); return f; }
+  const f = v => r0 + (v - d0) / (d1 - d0) * (r1 - r0); f.inv = p => d0 + (p - r0) / (r1 - r0) * (d1 - d0); return f;
+}
+function niceTicks(a, b, n = 6) {
+  const span = b - a, step0 = span / n, mag = Math.pow(10, Math.floor(Math.log10(step0)));
+  const step = [1, 2, 2.5, 5, 10].map(s => s * mag).find(s => span / s <= n) || 10 * mag;
+  const out = []; for (let v = Math.ceil(a / step) * step; v <= b + 1e-9 * step; v += step) out.push(+v.toFixed(10));
+  return out;
+}
+/* axes(svg, X, Y, {xt, yt, xlab, ylab, W, H, pad, log flags}) */
+function drawAxes(g, X, Y, o) {
+  const { x0, x1, y0, y1 } = o;
+  const xt = o.xt || niceTicks(o.xd[0], o.xd[1]), yt = o.yt || niceTicks(o.yd[0], o.yd[1]);
+  for (const t of yt) { sv("line", { x1: x0, x2: x1, y1: Y(t), y2: Y(t), class: "grid" }, g);
+    sv("text", { x: x0 - 6, y: Y(t) + 4, "text-anchor": "end" }, g).textContent = o.yfmt ? o.yfmt(t) : fmt(t, 3); }
+  for (const t of xt) { sv("line", { x1: X(t), x2: X(t), y1: y0, y2: y0 + 4, class: "axis" }, g);
+    sv("text", { x: X(t), y: y0 + 17, "text-anchor": "middle" }, g).textContent = o.xfmt ? o.xfmt(t) : fmt(t, 3); }
+  sv("line", { x1: x0, x2: x1, y1: y0, y2: y0, class: "axis" }, g);
+  sv("line", { x1: x0, x2: x0, y1: y0, y2: y1, class: "axis" }, g);
+  if (o.xlab) sv("text", { x: (x0 + x1) / 2, y: y0 + 36, "text-anchor": "middle" }, g).textContent = o.xlab;
+  if (o.ylab) { const t = sv("text", { x: 0, y: 0, "text-anchor": "middle", transform: `translate(${x0 - 46},${(y0 + y1) / 2}) rotate(-90)` }, g); t.textContent = o.ylab; }
+}
+
+/* ---------- stepper: prev / next / reset with aria-live narration ---------- */
+class Stepper {
+  constructor(root, { onRender, total, labels = {} }) {
+    this.i = 0; this.onRender = onRender; this.total = total;
+    this.prev = el("button", { type: "button", onclick: () => this.go(this.i - 1) }, labels.prev || "◀ Back");
+    this.next = el("button", { type: "button", class: "primary", onclick: () => this.go(this.i + 1) }, labels.next || "Next ▶");
+    this.reset = el("button", { type: "button", onclick: () => this.go(0) }, "Start over");
+    this.count = el("span", { class: "stepcount", "aria-hidden": "true" });
+    root.append(this.prev, this.next, this.reset, this.count);
+  }
+  setTotal(n) { this.total = n; this.go(Math.min(this.i, n - 1)); }
+  go(i) {
+    this.i = Math.max(0, Math.min(this.total - 1, i));
+    this.prev.disabled = this.i === 0; this.next.disabled = this.i === this.total - 1;
+    this.count.textContent = `Step ${this.i + 1} of ${this.total}`;
+    this.onRender(this.i);
+  }
+}
+
+/* announce helper for sliders etc. (debounced) */
+function makeAnnouncer(node) { let t; return msg => { clearTimeout(t); t = setTimeout(() => { node.textContent = msg; }, 350); }; }
+
+/* ---------- full SVD by one-sided Jacobi (Hestenes) ----------
+   svd(A) for an m x n array-of-rows. Returns {s, U, V}: s sorted descending,
+   U = array of r column vectors (length m), V = array of r column vectors (length n), r = min(m, n). */
+LA.svd = function (A0) {
+  let m = A0.length, n = A0[0].length, tr = false, get = (i, j) => A0[i][j];
+  if (m < n) { tr = true; [m, n] = [n, m]; get = (i, j) => A0[j][i]; }
+  const C = Array.from({ length: n }, (_, j) => { const c = new Float64Array(m); for (let i = 0; i < m; i++) c[i] = get(i, j); return c; });
+  const V = Array.from({ length: n }, (_, j) => { const v = new Float64Array(n); v[j] = 1; return v; });
+  for (let sweep = 0; sweep < 40; sweep++) {
+    let off = 0;
+    for (let p = 0; p < n - 1; p++) for (let q = p + 1; q < n; q++) {
+      const cp = C[p], cq = C[q];
+      let a = 0, b = 0, c = 0;
+      for (let i = 0; i < m; i++) { const x = cp[i], y = cq[i]; a += x * x; b += y * y; c += x * y; }
+      if (c === 0 || Math.abs(c) <= 1e-15 * Math.sqrt(a * b)) continue;
+      off = Math.max(off, Math.abs(c) / Math.sqrt(a * b));
+      const z = (b - a) / (2 * c), t = Math.sign(z || 1) / (Math.abs(z) + Math.sqrt(1 + z * z));
+      const cs = 1 / Math.sqrt(1 + t * t), sn = cs * t;
+      for (let i = 0; i < m; i++) { const x = cp[i], y = cq[i]; cp[i] = cs * x - sn * y; cq[i] = sn * x + cs * y; }
+      const vp = V[p], vq = V[q];
+      for (let i = 0; i < n; i++) { const x = vp[i], y = vq[i]; vp[i] = cs * x - sn * y; vq[i] = sn * x + cs * y; }
+    }
+    if (off < 1e-14) break;
+  }
+  const norms = C.map(c => Math.sqrt(c.reduce((s, x) => s + x * x, 0)));
+  const order = [...norms.keys()].sort((i, j) => norms[j] - norms[i]);
+  const s = order.map(j => norms[j]);
+  const Uc = order.map(j => { const c = C[j], d = norms[j]; return d > 0 ? c.map(x => x / d) : c.map(() => 0); });
+  const Vc = order.map(j => V[j]);
+  return tr ? { s, U: Vc, V: Uc } : { s, U: Uc, V: Vc };
+};
+/* flip signs so each v_i has a positive first nonzero entry (u_i flips with it) */
+LA.svdTidy = function (S) {
+  S.V.forEach((v, i) => { const k = v.findIndex(x => Math.abs(x) > 1e-12); if (k >= 0 && v[k] < 0) { S.V[i] = v.map(x => -x); S.U[i] = S.U[i].map(x => -x); } });
+  return S;
+};
+/* standard normal from a uniform PRNG (Box–Muller) */
+function gauss(rand) { let u = 0; while (u === 0) u = rand(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * rand()); }
+
+</script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<div class="wrap">
+<header class="site"><p class="crumb"><a href="index.html">The SVD &mdash; explorers</a></p><p class="crumb">MATH/CCM 472/572 &middot; The Singular Value Decomposition</p></header>
+<main id="main">
+<!-- title: Fitting a Line, Visually -->
+<!-- desc: The pictures behind fitting a line when both coordinates are noisy: vertical, horizontal and perpendicular gaps, the Pythagoras trade-off that makes v1 the best line, and a noisy cloud that leads into PCA. -->
+<style>
+:root { --gap: #c4302b; --along: #7a4cc4; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --gap: #f2726b; --along: #b596f2; } }
+:root[data-theme="dark"] { --gap: #f2726b; --along: #b596f2; }
+.c-gap { color: var(--gap); } .c-along { color: var(--along); }
+.tri { display: grid; grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr)); gap: 1rem 1.25rem; margin: 1rem 0; }
+.tri figure { margin: 0; min-width: 0; }
+.tri figcaption { font-size: .92rem; margin-top: .3rem; }
+.tri figcaption strong { display: block; }
+.tri .assume { color: var(--ink-3); display: block; }
+.tri .num { font-variant-numeric: tabular-nums; display: block; margin-top: .2rem; }
+.sums { font-variant-numeric: tabular-nums; }
+.sums p { margin: .3rem 0; }
+.pt { cursor: grab; }
+.pt:focus { outline: none; }
+.pt:focus-visible circle.dot { stroke: var(--focus); stroke-width: 3.5; }
+</style>
+
+<h1>Fitting a line when both coordinates are noisy</h1>
+<p class="lede">The three pictures from the notes (Figures 6, 7 and 8), made live. Sections 1 and 2 share the same six points, so a point you move in one moves in the other.</p>
+
+<nav class="toc panel" aria-label="On this page"><ol>
+  <li><a href="#gaps">Three ways to measure a gap</a></li>
+  <li><a href="#turn">Turning the line</a></li>
+  <li><a href="#cloud">A noisy cloud, and the start of PCA</a></li>
+</ol></nav>
+
+<h2 id="gaps">1. Three ways to measure a gap</h2>
+<p>Each line makes its own kind of squared gap (<span class="c-gap">red</span>) as small as possible. Least squares measures gaps vertically, which trusts <i>x</i>; measuring horizontally trusts <i>y</i>; the perpendicular gap treats both coordinates alike. Drag a point in the left panel, or focus it with Tab and move it with the arrow keys. All lines pass through the mean of the data, marked +.</p>
+<div class="controls"><button type="button" id="reset">Reset to the six points in the notes</button></div>
+<div class="tri">
+  <figure><svg id="g0" class="plot" viewBox="0 0 300 300" role="group" aria-label="Least squares, y on x: draggable data points with vertical gaps to the line"></svg>
+    <figcaption><strong>Least squares, <i>y</i> on <i>x</i></strong><span class="assume">assumes <i>x</i> is exact</span><span class="num" id="n0"></span></figcaption></figure>
+  <figure><svg id="g1" class="plot" viewBox="0 0 300 300" role="img" aria-label="Least squares, x on y, with horizontal gaps"></svg>
+    <figcaption><strong>Least squares, <i>x</i> on <i>y</i></strong><span class="assume">assumes <i>y</i> is exact</span><span class="num" id="n1"></span></figcaption></figure>
+  <figure><svg id="g2" class="plot" viewBox="0 0 300 300" role="img" aria-label="Perpendicular fit, the v1 line, with perpendicular gaps"></svg>
+    <figcaption><strong>Perpendicular fit (<i>v</i><sub>1</sub> line)</strong><span class="assume">treats <i>x</i> and <i>y</i> alike</span><span class="num" id="n2"></span></figcaption></figure>
+</div>
+<div class="panel sums" id="sums" aria-live="polite"></div>
+
+<h2 id="turn">2. Turning the line</h2>
+<p>Pick any line through the mean, in the direction of a unit vector <i>w</i>. Each point <i>p<sub>i</sub></i> splits into a part <span class="c-along">along the line</span> and a <span class="c-gap">perpendicular gap</span> <i>d<sub>i</sub></i>, the two legs of a right triangle, so &Vert;<i>p<sub>i</sub></i>&Vert;<sup>2</sup> = (<i>p<sub>i</sub></i>&middot;<i>w</i>)<sup>2</sup> + <i>d<sub>i</sub></i><sup>2</sup>. Added over all the points, the two parts always make the same total. Turn the line and watch the total split.</p>
+<div class="controls">
+  <label for="ang">Angle of the line: <strong id="angv"></strong></label>
+  <input type="range" id="ang" min="0" max="180" step="1" value="12">
+  <button type="button" id="snap">Snap to <i>v</i><sub>1</sub></button>
+  <label for="hl">Triangle for</label>
+  <select id="hl"></select>
+</div>
+<div class="row">
+  <div class="col" style="flex-basis:16rem;max-width:22rem"><svg id="split" class="plot" viewBox="0 0 300 300" role="img"></svg></div>
+  <div class="col" style="flex-basis:22rem"><svg id="curve" class="plot" viewBox="0 0 430 270" role="img"></svg></div>
+</div>
+<dl class="kv readout" id="r2" aria-live="polite"></dl>
+<p class="figcap">The total is &Vert;<i>X</i>&Vert;<sub><i>F</i></sub><sup>2</sup>, the sum of the squared lengths of the centered points, and it does not depend on the line. So the gaps are smallest exactly where &Vert;<i>Xw</i>&Vert;<sup>2</sup> is largest: at <i>w</i> = <i>v</i><sub>1</sub>, where &Vert;<i>Xw</i>&Vert;<sup>2</sup> = &sigma;<sub>1</sub><sup>2</sup> and the gaps add up to &sigma;<sub>2</sub><sup>2</sup>.</p>
+
+<h2 id="cloud">3. A noisy cloud, and the start of PCA</h2>
+<p>150 points scattered about the line <i>y</i> = <i>x</i> (dotted), with noise added to each coordinate. Set how noisy each coordinate is and compare the two fits.</p>
+<div class="controls">
+  <label for="sx">Noise in <i>x</i>: <strong id="sxv"></strong></label>
+  <input type="range" id="sx" min="0" max="1.5" step="0.05" value="0.7">
+  <label for="sy">Noise in <i>y</i>: <strong id="syv"></strong></label>
+  <input type="range" id="sy" min="0" max="1.5" step="0.05" value="0.7">
+  <button type="button" id="resample">Draw a new sample</button>
+</div>
+<div class="row">
+  <div class="col" style="flex-basis:20rem;max-width:30rem">
+    <svg id="cl" class="plot" viewBox="0 0 340 340" role="img"></svg>
+    <div class="legend">
+      <span><span class="chip" style="background:var(--ink)"></span><i>v</i><sub>1</sub> line</span>
+      <span><span class="chip" style="background:var(--s1)"></span>least squares, <i>y</i> on <i>x</i></span>
+      <span><span class="chip" style="background:var(--along)"></span><i>v</i><sub>1</sub>, <i>v</i><sub>2</sub> (length 2&sigma;<sub><i>i</i></sub>/&radic;<i>n</i>)</span>
+    </div>
+  </div>
+  <div class="col"><dl class="kv readout" id="r3" aria-live="polite"></dl></div>
+</div>
+<p class="figcap">The arrows have length 2&sigma;<sub><i>i</i></sub>/&radic;<i>n</i>, two standard deviations of the data in that direction, and the ellipse has the same axes. The cloud is roughly an ellipse: <i>v</i><sub>1</sub> points along its long axis, <i>v</i><sub>2</sub> along its short one, and the share &sigma;<sub>1</sub><sup>2</sup>/(&sigma;<sub>1</sub><sup>2</sup> + &sigma;<sub>2</sub><sup>2</sup>) is how much of the spread lies along <i>v</i><sub>1</sub>. That is principal component analysis in two dimensions.</p>
+
+<h3>Things to try</h3>
+<ul>
+  <li><strong>Equal noise.</strong> Leave both at 0.7. Least squares comes out too shallow; the <i>v</i><sub>1</sub> line stays close to slope 1.</li>
+  <li><strong>Only <i>y</i> noisy.</strong> Set the noise in <i>x</i> to 0. Now <i>x</i> really is exact, and least squares is the right tool. Which way is the <i>v</i><sub>1</sub> line off?</li>
+  <li><strong>Only <i>x</i> noisy.</strong> Set the noise in <i>y</i> to 0. Both fits are now off. The perpendicular fit is fair only when the two coordinates are about equally noisy.</li>
+  <li><strong>Lots of noise.</strong> Raise both. What happens to the share of the spread along <i>v</i><sub>1</sub>, and to the shape of the ellipse?</li>
+</ul>
+
+<script>
+(() => {
+  /* ---------- shared data: the six points from the notes ---------- */
+  const NOTES = [[1, 3], [2, 1], [3, 2], [-1, -3], [-2, -1], [-3, -2]];
+  let pts = NOTES.map(p => p.slice()), drag = null, hl = 0, phi = 12 * Math.PI / 180;
+  const L = 4.5, clamp = v => Math.max(-L + .25, Math.min(L - .25, Math.round(v * 4) / 4));
+  const X = scale(-L, L, 26, 294), Y = scale(-L, L, 274, 6);
+  const f2 = v => fmt(v, 2), num = v => (Math.abs(v) < 1e-9 ? "0" : (+v.toFixed(2)).toString().replace("-", "−"));
+
+  function stats(P) {
+    const n = P.length, mx = P.reduce((s, p) => s + p[0], 0) / n, my = P.reduce((s, p) => s + p[1], 0) / n;
+    const C = P.map(p => [p[0] - mx, p[1] - my]);
+    let sxx = 0, syy = 0, sxy = 0; C.forEach(([a, b]) => { sxx += a * a; syy += b * b; sxy += a * b; });
+    const S = LA.svdTidy(LA.svd(C)), v1 = Array.from(S.V[0]);
+    return { n, mx, my, C, sxx, syy, sxy, s: S.s, v1, v2: [-v1[1], v1[0]], tot: sxx + syy };
+  }
+  const along2 = (st, w) => st.C.reduce((s, p) => s + (p[0] * w[0] + p[1] * w[1]) ** 2, 0);
+
+  function clipLine(g, X, Y, lo, hi, mx, my, dx, dy, attrs) {
+    const ts = []; if (Math.abs(dx) > 1e-12) ts.push((lo - mx) / dx, (hi - mx) / dx); if (Math.abs(dy) > 1e-12) ts.push((lo - my) / dy, (hi - my) / dy);
+    const ok = ts.map(t => [mx + t * dx, my + t * dy]).filter(([a, b]) => a >= lo - 1e-9 && a <= hi + 1e-9 && b >= lo - 1e-9 && b <= hi + 1e-9);
+    if (ok.length < 2) return; ok.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+    const p = ok[0], q = ok[ok.length - 1];
+    sv("line", Object.assign({ x1: X(p[0]), y1: Y(p[1]), x2: X(q[0]), y2: Y(q[1]) }, attrs), g);
+  }
+  function frame(g) {
+    for (const t of [-3, 0, 3]) {
+      sv("line", { x1: X(t), x2: X(t), y1: 6, y2: 274, class: "grid", "stroke-opacity": t ? .5 : 1 }, g);
+      sv("line", { x1: 26, x2: 294, y1: Y(t), y2: Y(t), class: "grid", "stroke-opacity": t ? .5 : 1 }, g);
+      sv("text", { x: X(t), y: 291, "text-anchor": "middle" }, g).textContent = String(t).replace("-", "−");
+      sv("text", { x: 20, y: Y(t) + 4, "text-anchor": "end" }, g).textContent = String(t).replace("-", "−");
+    }
+  }
+  function dot(g, p, i, focusable, big) {
+    const h = sv("g", focusable ? { class: "pt", tabindex: 0, role: "button", "data-i": i, "aria-label": `Point ${i + 1} at (${num(p[0])}, ${num(p[1])}). Arrow keys move it.` } : { class: "pt", "data-i": i }, g);
+    sv("circle", { cx: X(p[0]), cy: Y(p[1]), r: 13, fill: "transparent" }, h);
+    sv("circle", { class: "dot", cx: X(p[0]), cy: Y(p[1]), r: big ? 6.5 : 5, fill: "var(--ink)", stroke: "var(--bg)", "stroke-width": 1.5 }, h);
+  }
+  const meanMark = (g, st) => sv("path", { d: `M${X(st.mx) - 6},${Y(st.my)}h12M${X(st.mx)},${Y(st.my) - 6}v12`, stroke: "var(--ink-3)", "stroke-width": 2 }, g);
+
+  /* ---------- section 1: three panels ---------- */
+  function drawPanels(st) {
+    const m = st.sxx > 1e-12 ? st.sxy / st.sxx : NaN;          // y on x
+    const mp = st.syy > 1e-12 ? st.sxy / st.syy : NaN;         // x on y: x - mx = mp (y - my)
+    const kinds = [
+      { col: "var(--s1)", dir: [1, isFinite(m) ? m : 0], foot: p => [p[0], st.my + m * (p[0] - st.mx)], gap: "vertical",
+        slope: m, sum: st.C.reduce((s, [a, b]) => s + (b - m * a) ** 2, 0) },
+      { col: "var(--s2)", dir: [isFinite(mp) ? mp : 0, 1], foot: p => [st.mx + mp * (p[1] - st.my), p[1]], gap: "horizontal",
+        slope: Math.abs(mp) > 1e-12 ? 1 / mp : Infinity, sum: st.C.reduce((s, [a, b]) => s + (a - mp * b) ** 2, 0) },
+      { col: "var(--ink)", dir: st.v1, foot: p => { const t = (p[0] - st.mx) * st.v1[0] + (p[1] - st.my) * st.v1[1]; return [st.mx + t * st.v1[0], st.my + t * st.v1[1]]; },
+        gap: "perpendicular", slope: Math.abs(st.v1[0]) > 1e-12 ? st.v1[1] / st.v1[0] : Infinity, sum: st.s[1] ** 2 },
+    ];
+    kinds.forEach((k, j) => {
+      const g = $("#g" + j); g.innerHTML = ""; frame(g);
+      const okLine = j === 2 || isFinite(j === 0 ? m : mp);
+      if (okLine) {
+        clipLine(g, X, Y, -L, L, st.mx, st.my, k.dir[0], k.dir[1], { stroke: k.col, "stroke-width": 2.6 });
+        pts.forEach(p => { const q = k.foot(p); sv("line", { x1: X(p[0]), y1: Y(p[1]), x2: X(q[0]), y2: Y(q[1]), stroke: "var(--gap)", "stroke-width": 2.2, "stroke-linecap": "round" }, g); });
+      }
+      meanMark(g, st);
+      pts.forEach((p, i) => dot(g, p, i, j === 0));
+      const sl = !okLine ? "undefined" : (isFinite(k.slope) ? num(k.slope) : "vertical");
+      $("#n" + j).innerHTML = `slope ${sl} &middot; squared ${k.gap} gaps add up to ${okLine ? num(k.sum) : "—"}`;
+      if (j) g.setAttribute("aria-label", `${j === 1 ? "Least squares, x on y" : "Perpendicular fit, the v1 line"}: slope ${sl}; squared ${k.gap} gaps add up to ${okLine ? num(k.sum) : "undefined"}.`);
+    });
+    const centered = Math.abs(st.mx) < 1e-9 && Math.abs(st.my) < 1e-9;
+    $("#sums").innerHTML = `<p><strong>The sums</strong>${centered ? "" : " (after centering: subtract the mean from every point)"}: &Sigma;<i>x<sub>i</sub></i><sup>2</sup> = ${num(st.sxx)}, &nbsp;&Sigma;<i>y<sub>i</sub></i><sup>2</sup> = ${num(st.syy)}, &nbsp;&Sigma;<i>x<sub>i</sub>y<sub>i</sub></i> = ${num(st.sxy)}.</p>
+      <p><span class="c1">Normal equation, <i>y</i> on <i>x</i>:</span> (&Sigma;<i>x<sub>i</sub></i><sup>2</sup>)&thinsp;<i>m</i> = &Sigma;<i>x<sub>i</sub>y<sub>i</sub></i>, so <i>m</i> = ${num(st.sxy)}/${num(st.sxx)} = ${isFinite(m) ? num(m) : "undefined"}.</p>
+      <p><span class="c2">Normal equation, <i>x</i> on <i>y</i>:</span> (&Sigma;<i>y<sub>i</sub></i><sup>2</sup>)&thinsp;<i>m</i>&prime; = &Sigma;<i>x<sub>i</sub>y<sub>i</sub></i>, so <i>m</i>&prime; = ${num(st.sxy)}/${num(st.syy)} = ${isFinite(mp) ? num(mp) : "undefined"}, a line for <i>y</i> of slope 1/<i>m</i>&prime; = ${Math.abs(mp) > 1e-12 ? num(1 / mp) : "vertical"}.</p>
+      <p><strong><i>v</i><sub>1</sub> line:</strong> <i>X</i><sup>T</sup><i>X</i> = [[${num(st.sxx)}, ${num(st.sxy)}], [${num(st.sxy)}, ${num(st.syy)}]] has eigenvalues &sigma;<sub>1</sub><sup>2</sup> = ${num(st.s[0] ** 2)} and &sigma;<sub>2</sub><sup>2</sup> = ${num(st.s[1] ** 2)}; <i>v</i><sub>1</sub> = (${fmt(st.v1[0], 3)}, ${fmt(st.v1[1], 3)}).</p>`;
+  }
+
+  /* ---------- section 2: split + trade-off curve ---------- */
+  const deg = a => ((a * 180 / Math.PI) % 180 + 180) % 180;
+  function drawSplit(st) {
+    const g = $("#split"); g.innerHTML = ""; frame(g);
+    const w = [Math.cos(phi), Math.sin(phi)];
+    clipLine(g, X, Y, -L, L, st.mx, st.my, w[0], w[1], { stroke: "var(--ink-2)", "stroke-width": 2 });
+    const foot = p => { const t = (p[0] - st.mx) * w[0] + (p[1] - st.my) * w[1]; return [st.mx + t * w[0], st.my + t * w[1], t]; };
+    pts.forEach((p, i) => { if (i === hl) return; const q = foot(p);
+      sv("line", { x1: X(p[0]), y1: Y(p[1]), x2: X(q[0]), y2: Y(q[1]), stroke: "var(--gap)", "stroke-width": 1.6, "stroke-opacity": .4 }, g); });
+    const p = pts[hl], q = foot(p);
+    sv("line", { x1: X(st.mx), y1: Y(st.my), x2: X(p[0]), y2: Y(p[1]), stroke: "var(--ink)", "stroke-width": 1.4, "stroke-dasharray": "2 3" }, g);
+    sv("line", { x1: X(st.mx), y1: Y(st.my), x2: X(q[0]), y2: Y(q[1]), stroke: "var(--along)", "stroke-width": 4.5 }, g);
+    sv("line", { x1: X(p[0]), y1: Y(p[1]), x2: X(q[0]), y2: Y(q[1]), stroke: "var(--gap)", "stroke-width": 4.5 }, g);
+    const d = Math.hypot(p[0] - q[0], p[1] - q[1]);
+    if (d > .3 && Math.abs(q[2]) > .3) { // right-angle marker
+      const nx = (p[0] - q[0]) / d, ny = (p[1] - q[1]) / d, s = .28, sg = Math.sign(q[2]);
+      const a = [q[0] - sg * s * w[0], q[1] - sg * s * w[1]];
+      sv("path", { d: `M${X(a[0])},${Y(a[1])}L${X(a[0] + s * nx)},${Y(a[1] + s * ny)}L${X(q[0] + s * nx)},${Y(q[1] + s * ny)}`, fill: "none", stroke: "var(--ink-2)", "stroke-width": 1 }, g);
+    }
+    meanMark(g, st);
+    pts.forEach((pp, i) => dot(g, pp, i, false, i === hl));
+    sv("text", { x: X(p[0]) + 9, y: Y(p[1]) - 8, style: "font-size:14px;font-style:italic;fill:var(--ink)" }, g).textContent = `p${"₁₂₃₄₅₆₇₈₉"[hl] || ""}`;
+    const t = q[2];
+    g.setAttribute("aria-label", `Line through the mean at ${Math.round(deg(phi))} degrees. Point ${hl + 1} splits into a part along the line of length ${num(Math.abs(t))} and a perpendicular gap of length ${num(d)}.`);
+    return { t, d };
+  }
+  function drawCurve(st) {
+    const g = $("#curve"); g.innerHTML = "";
+    const top = st.tot * 1.15, CX = scale(0, 180, 52, 418), CY = scale(0, top, 222, 14);
+    drawAxes(g, CX, CY, { x0: 52, x1: 418, y0: 222, y1: 14, xd: [0, 180], yd: [0, top], xt: [0, 45, 90, 135, 180], yt: niceTicks(0, top, 5).filter(v => v <= top), xfmt: t => t + "°", xlab: "angle of the line" });
+    let up = "", pd = `M${CX(0)},${CY(0)}`;
+    for (let a = 0; a <= 180; a++) { const r = a * Math.PI / 180, v = along2(st, [Math.cos(r), Math.sin(r)]); up += `L${CX(a).toFixed(1)},${CY(v).toFixed(1)}`; }
+    sv("path", { d: pd + up + `L${CX(180)},${CY(0)}Z`, fill: "var(--along)", "fill-opacity": .16 }, g);
+    sv("path", { d: `M${CX(0)},${CY(st.tot)}` + up.replace(/^L/, "L") + `L${CX(180)},${CY(st.tot)}Z`, fill: "var(--gap)", "fill-opacity": .13 }, g);
+    sv("path", { d: "M" + up.slice(1), fill: "none", stroke: "var(--along)", "stroke-width": 2.4 }, g);
+    sv("line", { x1: 52, x2: 418, y1: CY(st.tot), y2: CY(st.tot), stroke: "var(--ink-2)", "stroke-width": 1.4 }, g);
+    sv("text", { x: 416, y: CY(st.tot) - 6, "text-anchor": "end" }, g).textContent = `total ${num(st.tot)} (fixed)`;
+    const a1 = deg(Math.atan2(st.v1[1], st.v1[0])), a2 = (a1 + 90) % 180;
+    const lab = (ang, yv, txt, col) => sv("text", { x: CX(ang), y: CY(yv) + 4, "text-anchor": "middle", style: `fill:${col};font-weight:600;paint-order:stroke;stroke:var(--bg);stroke-width:3px` }, g).textContent = txt;
+    const r2a = a2 * Math.PI / 180, al2 = along2(st, [Math.cos(r2a), Math.sin(r2a)]);
+    lab(a2, (al2 + st.tot) / 2, "squared gaps", "var(--gap)");
+    lab(a1, st.s[0] ** 2 / 2, "along the line", "var(--along)");
+    sv("circle", { cx: CX(a1), cy: CY(st.s[0] ** 2), r: 4, fill: "var(--ink)" }, g);
+    sv("text", { x: CX(a1), y: CY(st.s[0] ** 2) - 9, "text-anchor": "middle", style: "fill:var(--ink);font-style:italic" }, g).textContent = "v₁";
+    // current angle marker
+    const a = deg(phi), w = [Math.cos(phi), Math.sin(phi)], al = along2(st, w);
+    sv("line", { x1: CX(a), x2: CX(a), y1: CY(0), y2: CY(al), stroke: "var(--along)", "stroke-width": 5 }, g);
+    sv("line", { x1: CX(a), x2: CX(a), y1: CY(al), y2: CY(st.tot), stroke: "var(--gap)", "stroke-width": 5 }, g);
+    g.setAttribute("aria-label", `Squared length along the line, ‖Xw‖², against the angle of the line, under a fixed total of ${num(st.tot)}. At ${Math.round(a)} degrees: along ${num(al)}, gaps ${num(st.tot - al)}. The gaps are smallest, sigma 2 squared = ${num(st.s[1] ** 2)}, at the v1 direction, ${Math.round(a1)} degrees.`);
+    return { al, a1 };
+  }
+  function drawTurn(st) {
+    const { t, d } = drawSplit(st), { al, a1 } = drawCurve(st);
+    $("#angv").textContent = Math.round(deg(phi)) + "°";
+    $("#r2").innerHTML = `<dt>point ${hl + 1}: (<i>p</i>&middot;<i>w</i>)<sup>2</sup> + <i>d</i><sup>2</sup></dt><dd><span class="c-along">${num(t * t)}</span> + <span class="c-gap">${num(d * d)}</span> = ${num(t * t + d * d)}</dd>
+      <dt>all points: <span class="c-along">&Vert;<i>Xw</i>&Vert;<sup>2</sup></span> + <span class="c-gap">&Sigma;<i>d<sub>i</sub></i><sup>2</sup></span></dt><dd><span class="c-along">${num(al)}</span> + <span class="c-gap">${num(st.tot - al)}</span> = ${num(st.tot)}</dd>
+      <dt>at <i>v</i><sub>1</sub> (${Math.round(a1)}°)</dt><dd>&sigma;<sub>1</sub><sup>2</sup> = ${num(st.s[0] ** 2)}, &nbsp;gaps = &sigma;<sub>2</sub><sup>2</sup> = ${num(st.s[1] ** 2)}</dd>`;
+  }
+
+  function renderShared() { const st = stats(pts); drawPanels(st); drawTurn(st); }
+
+  /* dragging (left panel of section 1, and the split picture) */
+  function hookDrag(svg) {
+    const toData = e => { const r = svg.getBoundingClientRect(); return [X.inv((e.clientX - r.left) * 300 / r.width), Y.inv((e.clientY - r.top) * 300 / r.height)]; };
+    svg.addEventListener("pointerdown", e => { const h = e.target.closest("[data-i]"); if (!h) return; drag = +h.dataset.i;
+      if (svg.id === "split") { hl = drag; $("#hl").value = hl; } svg.setPointerCapture(e.pointerId); e.preventDefault(); renderShared(); });
+    svg.addEventListener("pointermove", e => { if (drag === null) return; pts[drag] = toData(e).map(clamp); renderShared(); });
+    const end = () => { if (drag === null) return; const i = drag; drag = null; renderShared(); if (svg.id === "g0") { const h = svg.querySelector(`[data-i="${i}"]`); h && h.focus({ preventScroll: true }); } };
+    svg.addEventListener("pointerup", end); svg.addEventListener("pointercancel", end);
+  }
+  hookDrag($("#g0")); hookDrag($("#split"));
+  $("#g0").addEventListener("keydown", e => { const h = e.target.closest("[data-i]"); if (!h) return;
+    const d = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, 1], ArrowDown: [0, -1] }[e.key]; if (!d) return; e.preventDefault();
+    const i = +h.dataset.i, s = e.shiftKey ? 1 : .25; pts[i] = [clamp(pts[i][0] + d[0] * s), clamp(pts[i][1] + d[1] * s)]; renderShared(); $(`#g0 [data-i="${i}"]`).focus(); });
+  $("#reset").addEventListener("click", () => { pts = NOTES.map(p => p.slice()); renderShared(); });
+  NOTES.forEach((_, i) => $("#hl").append(el("option", { value: i }, `point ${i + 1}`)));
+  $("#hl").addEventListener("change", e => { hl = +e.target.value; renderShared(); });
+  $("#ang").addEventListener("input", e => { phi = +e.target.value * Math.PI / 180; renderShared(); });
+  $("#snap").addEventListener("click", () => { const v1 = stats(pts).v1, a = deg(Math.atan2(v1[1], v1[0])); phi = a * Math.PI / 180; $("#ang").value = Math.round(a); renderShared(); });
+
+  /* ---------- section 3: the noisy cloud ---------- */
+  const N = 150, CL = 6, CXs = scale(-CL, CL, 30, 334), CYs = scale(-CL, CL, 310, 6);
+  let seed = 10, base = null;
+  function makeBase() { const r = mulberry32(seed * 7919 + 13); base = Array.from({ length: N }, () => [-3 + 6 * r(), gauss(r), gauss(r)]); }
+  function drawCloud() {
+    const sx = +$("#sx").value, sy = +$("#sy").value;
+    $("#sxv").textContent = sx.toFixed(2); $("#syv").textContent = sy.toFixed(2);
+    const P = base.map(([t, zx, zy]) => [t + sx * zx, t + sy * zy]), st = stats(P), g = $("#cl"); g.innerHTML = "";
+    for (const t of [-4, -2, 0, 2, 4]) {
+      sv("line", { x1: CXs(t), x2: CXs(t), y1: 6, y2: 310, class: "grid", "stroke-opacity": t ? .45 : 1 }, g);
+      sv("line", { x1: 30, x2: 334, y1: CYs(t), y2: CYs(t), class: "grid", "stroke-opacity": t ? .45 : 1 }, g);
+      sv("text", { x: CXs(t), y: 326, "text-anchor": "middle" }, g).textContent = String(t).replace("-", "−");
+      sv("text", { x: 24, y: CYs(t) + 4, "text-anchor": "end" }, g).textContent = String(t).replace("-", "−");
+    }
+    const C = st.C;
+    C.forEach(([a, b]) => sv("circle", { cx: CXs(a), cy: CYs(b), r: 2.6, fill: "var(--ink-3)", "fill-opacity": .75 }, g));
+    // ellipse with axes v1, v2 and semi-axes 2 sigma_i / sqrt(n)
+    const r1 = 2 * st.s[0] / Math.sqrt(N), r2 = 2 * st.s[1] / Math.sqrt(N);
+    let d = ""; for (let k = 0; k <= 96; k++) { const th = 2 * Math.PI * k / 96, c = Math.cos(th), s = Math.sin(th);
+      const x = r1 * c * st.v1[0] + r2 * s * st.v2[0], y = r1 * c * st.v1[1] + r2 * s * st.v2[1]; d += (k ? "L" : "M") + CXs(x).toFixed(1) + "," + CYs(y).toFixed(1); }
+    sv("path", { d, fill: "none", stroke: "var(--ink-2)", "stroke-width": 1.1, "stroke-opacity": .8 }, g);
+    clipLine(g, CXs, CYs, -CL, CL, 0, 0, 1, 1, { stroke: "var(--ink-3)", "stroke-width": 1.4, "stroke-dasharray": "1.5 4", "stroke-linecap": "round" });
+    const mls = st.sxy / st.sxx;
+    clipLine(g, CXs, CYs, -CL, CL, 0, 0, 1, mls, { stroke: "var(--s1)", "stroke-width": 2.2, "stroke-dasharray": "7 4" });
+    clipLine(g, CXs, CYs, -CL, CL, 0, 0, st.v1[0], st.v1[1], { stroke: "var(--ink)", "stroke-width": 2.4 });
+    const arrow = (v, r, lab, off) => {
+      const tx = r * v[0], ty = r * v[1], ux = CXs(tx) - CXs(0), uy = CYs(ty) - CYs(0), len = Math.hypot(ux, uy) || 1, hx = ux / len, hy = uy / len;
+      sv("line", { x1: CXs(0), y1: CYs(0), x2: CXs(tx) - 8 * hx, y2: CYs(ty) - 8 * hy, stroke: "var(--along)", "stroke-width": 3 }, g);
+      sv("path", { d: `M${CXs(tx)},${CYs(ty)}L${CXs(tx) - 11 * hx - 5 * hy},${CYs(ty) - 11 * hy + 5 * hx}L${CXs(tx) - 11 * hx + 5 * hy},${CYs(ty) - 11 * hy - 5 * hx}Z`, fill: "var(--along)" }, g);
+      sv("text", { x: CXs(tx + off[0]), y: CYs(ty + off[1]) + 5, "text-anchor": "middle", style: "fill:var(--along);font-size:15px;font-style:italic;paint-order:stroke;stroke:var(--bg);stroke-width:4px" }, g).textContent = lab;
+    };
+    arrow(st.v1, r1, "v₁", [.45 * st.v1[0] + .45 * st.v2[0] * -1, .45 * st.v1[1] - .45 * st.v2[1]]);
+    arrow(st.v2, r2, "v₂", [.4 * st.v2[0], .4 * st.v2[1]]);
+    const s1 = st.s[0] ** 2, s2 = st.s[1] ** 2, sv1 = Math.abs(st.v1[0]) > 1e-9 ? st.v1[1] / st.v1[0] : Infinity;
+    $("#r3").innerHTML = `<dt>true slope</dt><dd>1</dd>
+      <dt>slope, <strong><i>v</i><sub>1</sub> line</strong></dt><dd>${isFinite(sv1) ? sv1.toFixed(2) : "vertical"}</dd>
+      <dt>slope, <span class="c1">least squares <i>y</i> on <i>x</i></span></dt><dd>${mls.toFixed(2)}</dd>
+      <dt>&sigma;<sub>1</sub><sup>2</sup>, &sigma;<sub>2</sub><sup>2</sup></dt><dd>${s1.toFixed(1)}, ${s2.toFixed(1)}</dd>
+      <dt>share of the spread along <i>v</i><sub>1</sub></dt><dd>${(100 * s1 / (s1 + s2)).toFixed(1)}%</dd>`;
+    g.setAttribute("aria-label", `Scatter plot of ${N} centered points with noise ${sx.toFixed(2)} in x and ${sy.toFixed(2)} in y. The v1 line has slope ${isFinite(sv1) ? sv1.toFixed(2) : "vertical"}; least squares y on x has slope ${mls.toFixed(2)}; the true slope is 1. ${(100 * s1 / (s1 + s2)).toFixed(1)} percent of the spread lies along v1.`);
+  }
+  makeBase();
+  $("#sx").addEventListener("input", drawCloud); $("#sy").addEventListener("input", drawCloud);
+  $("#resample").addEventListener("click", () => { seed++; makeBase(); drawCloud(); });
+
+  renderShared(); drawCloud();
+})();
+</script>
+
+</main>
+<footer class="site">Interactive companion to the course notes. Every number on this page is computed live in your browser in IEEE double precision &mdash; the same arithmetic NumPy uses.</footer>
+</div>
+</body>
+</html>
